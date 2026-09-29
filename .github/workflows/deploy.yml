@@ -55,6 +55,8 @@ jobs:
           printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
           chmod 600 ~/.ssh/id_deploy
           printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          # Fingerprint only (safe to print). Compare with: ssh-keygen -lf github_actions.pub
+          echo "Deploy key fingerprint:"; ssh-keygen -lf ~/.ssh/id_deploy
 
       - name: Deploy
         env:
@@ -65,7 +67,7 @@ jobs:
           SERVICES: ${{ steps.changes.outputs.services }}
           NGINX: ${{ steps.changes.outputs.nginx }}
         run: |
-          ssh -i ~/.ssh/id_deploy -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o IdentitiesOnly=yes -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
             "PROJECT_DIR='$PROJECT_DIR' SERVICES='$SERVICES' NGINX='$NGINX' bash -s" <<'REMOTE'
           set -euo pipefail
           export XDG_RUNTIME_DIR=/run/user/$(id -u)
