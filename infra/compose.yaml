@@ -1,0 +1,77 @@
+# Run from the repo root:  podman-compose -f infra/compose.yaml up -d --build
+name: autonegotiater
+
+services:
+  postgresql:
+    image: docker.io/library/postgres:17-alpine
+    container_name: autoneg-postgresql
+    env_file: ../.env
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: always
+
+  redis:
+    image: docker.io/library/redis:7-alpine
+    container_name: autoneg-redis
+    volumes:
+      - redisdata:/data
+    restart: always
+
+  fastapi:
+    build: ../backend
+    image: localhost/autoneg-backend:latest
+    container_name: autoneg-fastapi
+    env_file: ../.env
+    volumes:
+      - media:/app/media
+    depends_on:
+      postgresql:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: always
+
+  celery-worker:
+    build: ../backend
+    image: localhost/autoneg-backend:latest
+    container_name: autoneg-celery
+    env_file: ../.env
+    command: ["celery", "-A", "app.worker", "worker", "--loglevel=info", "--concurrency=2"]
+    depends_on:
+      - redis
+      - postgresql
+    restart: always
+
+  nextjs:
+    build: ../frontend
+    image: localhost/autoneg-frontend:latest
+    container_name: autoneg-nextjs
+    env_file: ../.env
+    depends_on:
+      - fastapi
+    restart: always
+
+  nginx:
+    image: docker.io/library/nginx:stable-alpine
+    container_name: autoneg-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro,Z
+      - ${CERTS_DIR:-/home/deploy/certs}:/etc/nginx/certs:ro,Z
+      - media:/srv/media:ro
+    depends_on:
+      - nextjs
+      - fastapi
+    restart: always
+
+volumes:
+  pgdata:
+  redisdata:
+  media:

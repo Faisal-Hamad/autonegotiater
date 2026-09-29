@@ -4,9 +4,8 @@
 - Phase 1 (IT 498) is done: `Automated_Negotiation_System_Final.pdf` covers chapters 1–4. It defines 11 FRs, 10 NFRs and 8 ERD tables: User, Product, SellerRules, NegotiationSession, Offer, Deal, Rating, AuditLog.
 - Phase 2 (IT 499) is where we build the system. There are 15 weekly deliveries, and Week 1 (tech stack) is already submitted.
 - Where things stand now:
-  - An AlmaLinux EC2 server is running.
-  - The GitHub repo `Faisal-Hamad/autonegotiater` is **empty**.
-  - `autonegotiater.com` **does not resolve yet**.
+  - The server is set up (AlmaLinux 10, Podman, Cloudflare + Origin Certificate). See `docs/server-setup.md`.
+  - The repo has the week 2 skeleton: backend, frontend, infra and the CI workflow.
 - **Important:** Fig. 4.1 in the Phase 1 report shows **Laravel + MySQL + Sanctum/Reverb**, but the new stack is **FastAPI + PostgreSQL**. Chapter 5 needs a short "Changes from the design" paragraph that explains why we changed:
   - Python is the natural language for the NLP/AI negotiation engine (FR11).
   - Celery runs the negotiation rounds in the background (NFR-01, NFR-02).
@@ -20,9 +19,10 @@
 | Component | Verdict | Note |
 |---|---|---|
 | AlmaLinux + Podman | ✅ Keep | Watch out for **SELinux**: add `:Z` to volume mounts. Rootless Podman can't bind ports 80/443 by default. |
-| nginx | ✅ Keep | Reverse proxy: `/` → nextjs, `/api` → fastapi, `/media` → uploaded images. TLS comes from certbot. |
+| nginx | ✅ Keep | Reverse proxy: `/` → nextjs, `/api` → fastapi, `/media` → uploaded images. TLS uses a Cloudflare Origin Certificate. |
 | Next.js | ✅ Keep | Same as Phase 1. It talks **only** to FastAPI. |
 | FastAPI | ✅ Keep | Holds all the business logic: auth, negotiation engine, privacy filter, scoring. |
+| GitHub Actions (SSH deploy) | ✅ Added | CI/CD: a push to `main` connects over SSH, pulls, rebuilds only the changed services and health-checks. |
 | celery-worker + redis | ✅ Keep | Redis does three jobs: Celery broker, cache, and pub/sub for live notifications. |
 | **PostgreSQL** | ✅ Keep, in Podman | This is the only database. It is **not exposed** outside the Podman network. |
 | **Supabase** | ❌ Dropped | We don't need it. The frontend never talks to the DB directly (NFR-03), so what Supabase would really give us is hosted Postgres + Auth. Free projects also get paused after about a week of inactivity, which is a risk on demo day. |
@@ -39,7 +39,7 @@ What replaces Supabase features:
 Final stack:
 ```
 AlmaLinux (EC2)
-└── Podman (podman-compose, started on boot by a systemd unit)
+└── Podman (podman-compose; podman-restart.service brings containers back on boot)
     ├── nginx          :80/:443  (TLS, reverse proxy, /media)
     ├── nextjs         :3000
     ├── fastapi        :8000
@@ -52,31 +52,18 @@ AlmaLinux (EC2)
 
 ## 2. Week 2 — detailed tasks
 
-### 2.1 Server (finish the server setup)
-1. **EC2:**
-   - Attach an **Elastic IP**.
-   - Security group: port 22 from your IP only; 80 and 443 open to everyone.
-   - **Do not** open 5432 or 6379.
-2. **Domain:** at the registrar, add:
-   - an `A` record: `autonegotiater.com` → the Elastic IP
-   - a `CNAME`: `www` → `autonegotiater.com`
-3. **System:**
-   - Run `dnf update`.
-   - Create a non-root deploy user.
-   - Allow SSH with keys only.
-   - In `firewalld`, allow http and https.
-4. **Podman:** `dnf install podman podman-compose git`.
-   - Allow low ports: `sysctl net.ipv4.ip_unprivileged_port_start=80`. Make it persistent in `/etc/sysctl.d/`.
-   - Run `loginctl enable-linger <user>` so the containers keep running after you log out.
-5. **Secrets:** put these in `.env` on the server (**never commit it**):
-   - `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`
-   - `DATABASE_URL`
-   - `REDIS_URL`
-   - `JWT_SECRET`
-6. **TLS:** once DNS resolves, run certbot (standalone or webroot) and mount the certs into nginx. Set up auto-renew with a systemd timer.
-7. **Smoke test:**
-   - `https://autonegotiater.com` shows the Next.js page.
-   - `https://autonegotiater.com/api/health` returns `{"status":"ok","db":"ok"}`.
+### 2.1 Server — ✅ done (details in `docs/server-setup.md`)
+- AlmaLinux 10, `deploy` user with linger, rootless Podman + podman-compose (from EPEL), low ports allowed with sysctl, firewalld, fail2ban.
+- Domain on **Cloudflare (Proxied)** with a **Cloudflare Origin Certificate** in Full (Strict) mode. This replaces certbot: it lasts 15 years with no renewal.
+- The repo is cloned at `/var/www/autonegotiater` with a read-only deploy key.
+- Still to do on the server:
+  1. Copy `.env.example` to `.env` and fill in real values (`chmod 600`).
+  2. CI/CD: GitHub Actions deploys over SSH (the secrets are set). Every push to `main` deploys.
+  3. Run `systemctl --user enable --now podman-restart.service` as `deploy`, so containers come back after a reboot.
+  4. Enable the backup timer from `infra/systemd/`.
+- **Smoke test:**
+  - `https://autonegotiater.com` shows the Next.js page.
+  - `https://autonegotiater.com/api/health` returns `{"status":"ok","db":"ok"}`.
 
 ### 2.2 Repo structure (start coding)
 ```
@@ -93,8 +80,10 @@ autonegotiater/
 │   └── Containerfile
 ├── infra/compose.yaml         nginx, nextjs, fastapi, celery-worker, redis, postgresql
 ├── infra/nginx/default.conf
-├── infra/backup/              pg_dump script + systemd timer
-├── docs/problems.txt          shared issues log
+├── infra/backup/              pg_dump script
+├── infra/systemd/             backup timer units
+├── .github/workflows/deploy.yml  CI/CD (SSH deploy)
+├── docs/                      PLAN.md, server-setup.md, problems.txt
 ├── .env.example
 └── README.md
 ```

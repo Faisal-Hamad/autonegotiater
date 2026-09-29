@@ -1,0 +1,99 @@
+name: Deploy
+
+# Runs on GitHub's runner and deploys to the server over SSH.
+# Only the services whose folders changed are rebuilt.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide which services to rebuild
+        id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          # Manual run, first push, or unknown base → rebuild everything.
+          if [ "${{ github.event_name }}" != "push" ] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            echo "services=all" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+          echo "Changed files:"; echo "$files"
+
+          services=""
+          if echo "$files" | grep -q '^infra/compose.yaml$'; then
+            services="all"
+          else
+            echo "$files" | grep -q '^backend/'   && services="$services fastapi celery-worker"
+            echo "$files" | grep -q '^frontend/'  && services="$services nextjs"
+          fi
+          nginx=false
+          echo "$files" | grep -q '^infra/nginx/' && nginx=true
+
+          echo "services=${services# }" >> "$GITHUB_OUTPUT"
+          echo "nginx=$nginx" >> "$GITHUB_OUTPUT"
+
+      - name: Set up SSH
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+
+      - name: Deploy
+        env:
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          PROJECT_DIR: ${{ secrets.PROJECT_DIR }}
+          SERVICES: ${{ steps.changes.outputs.services }}
+          NGINX: ${{ steps.changes.outputs.nginx }}
+        run: |
+          ssh -i ~/.ssh/id_deploy -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+            "PROJECT_DIR='$PROJECT_DIR' SERVICES='$SERVICES' NGINX='$NGINX' bash -s" <<'REMOTE'
+          set -euo pipefail
+          export XDG_RUNTIME_DIR=/run/user/$(id -u)
+          cd "$PROJECT_DIR"
+
+          git fetch origin main
+          git reset --hard origin/main
+          echo "Deployed commit: $(git log -1 --oneline)"
+
+          compose="podman-compose -f infra/compose.yaml"
+          if [ "$SERVICES" = "all" ]; then
+            echo "Rebuilding all services"
+            $compose up -d --build --force-recreate
+          elif [ -n "$SERVICES" ]; then
+            echo "Rebuilding: $SERVICES"
+            $compose up -d --build --force-recreate --no-deps $SERVICES
+          else
+            echo "No service code changed, nothing to rebuild"
+          fi
+
+          # nginx caches container IPs and reads its config at start:
+          # restart it after any rebuild or nginx config change.
+          if [ -n "$SERVICES" ] || [ "$NGINX" = "true" ]; then
+            podman restart autoneg-nginx
+          fi
+
+          podman image prune -f >/dev/null
+          curl -fsSk --retry 10 --retry-delay 3 --retry-all-errors https://localhost/api/health
+          echo
+          podman ps --format '{{.Names}}\t{{.Status}}'
+          REMOTE

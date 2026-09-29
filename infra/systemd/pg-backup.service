@@ -1,0 +1,6 @@
+[Unit]
+Description=AutoNegotiater PostgreSQL backup
+
+[Service]
+Type=oneshot
+ExecStart=/var/www/autonegotiater/infra/backup/pg-backup.sh
