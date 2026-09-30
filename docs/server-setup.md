@@ -262,7 +262,7 @@ volumes:
 
 ---
 
-## سجل المشاكل (بصيغة problems.txt)
+## سجل المشاكل (بصيغة problems.md)
 
 ```
 [2026-09-29] Faisal | server
@@ -469,7 +469,7 @@ gunzip -c ~/backups/<file>.sql.gz | podman exec -i autoneg-postgresql sh -c 'psq
 - [ ] `/products` يعرض المنتجات **بدون** `min_acceptable_price`
 - [ ] 5432 و 6379 غير متاحة من برا
 - [ ] البيانات تبقى بعد `podman-compose down && up` وبعد `sudo reboot`
-- [ ] الريبو فيه الهيكل + `problems.txt`
+- [ ] الريبو فيه الهيكل + `problems.md`
 
 ### 8. لاحقًا
 - مراجعة قواعد AWS Security Group

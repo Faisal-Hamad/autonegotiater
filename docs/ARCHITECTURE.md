@@ -200,7 +200,7 @@ autonegotiater/
 |---|---|
 | `PLAN.md` | خطة الـ 15 أسبوع |
 | `server-setup.md` | كل اللي سويناه على السيرفر |
-| `problems.txt` | المشاكل اللي واجهتنا وحلولها |
+| `problems.md` | المشاكل اللي واجهتنا وحلولها |
 | `ARCHITECTURE.md` | هذا الملف |
 
 ---

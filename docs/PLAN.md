@@ -83,7 +83,7 @@ autonegotiater/
 ├── infra/backup/              pg_dump script
 ├── infra/systemd/             backup timer units
 ├── .github/workflows/deploy.yml  CI/CD (SSH deploy)
-├── docs/                      PLAN.md, server-setup.md, problems.txt
+├── docs/                      PLAN.md, server-setup.md, problems.md
 ├── .env.example
 └── README.md
 ```
@@ -119,13 +119,13 @@ Note these differences in Chapter 5:
 
 Run it with `podman exec fastapi python seed.py`.
 
-### 2.5 problems.txt (requirement 4)
-Format: one entry per problem. Every member adds to it.
-```
-[2026-10-0X] <name> | <area: server/db/frontend/backend>
-Problem: ...
-Cause:   ...
-Fix:     ...
+### 2.5 problems.md (requirement 4)
+`docs/problems.md` has one entry per problem, grouped by area (Server, Backend, Frontend, CI/CD). Every member adds to it.
+```markdown
+### N. Short title
+- **Problem:** ...
+- **Cause:** ...
+- **Fix:** ...
 ```
 Problems we'll probably hit and should record:
 - SELinux blocking volumes (fix: `:Z`)
@@ -172,5 +172,5 @@ Keep a buffer: if any week slips, week 12 (hardening) can shrink.
   - `/products` shows the seeded products **without** `min_acceptable_price` in the JSON.
   - Ports 5432 and 6379 are **not** reachable from outside.
   - The data survives `podman-compose down && up` and `sudo reboot`.
-  - The repo has the structure above plus `problems.txt`.
-- **Each later week:** a short demo of that week's FRs on the live domain, plus a merged PR on GitHub and new entries in problems.txt.
+  - The repo has the structure above plus `problems.md`.
+- **Each later week:** a short demo of that week's FRs on the live domain, plus a merged PR on GitHub and new entries in problems.md.
