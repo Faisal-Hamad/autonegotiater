@@ -5,12 +5,46 @@ export const dynamic = "force-dynamic";
 
 const sar = new Intl.NumberFormat("en-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
-export default async function SellerDashboardPage() {
-  const data = await getSellerDashboard(1); // Seller 1 (Ahmed Alharbi)
+const DEMO_SELLERS = [
+  { id: 1, name: "Ahmed Alharbi", email: "seller1@demo.autonegotiater.com" },
+  { id: 2, name: "Sara Alqahtani", email: "seller2@demo.autonegotiater.com" },
+  { id: 3, name: "Khalid Alotaibi", email: "seller3@demo.autonegotiater.com" },
+];
+
+export default async function SellerDashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ id?: string }>;
+}) {
+  const params = await searchParams;
+  const currentSellerId = params?.id ? parseInt(params.id, 10) || 1 : 1;
+  const data = await getSellerDashboard(currentSellerId);
 
   return (
     <div className="space-y-8 py-6">
-      {/* رأس الصفحة وبيانات التاجر */}
+      {/* شريط اختيار وتبديل التاجر */}
+      <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-slate-100 p-3 border border-slate-200">
+        <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
+          Switch Demo Seller:
+        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {DEMO_SELLERS.map((s) => (
+            <Link
+              key={s.id}
+              href={`/dashboard/seller?id=${s.id}`}
+              className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
+                currentSellerId === s.id
+                  ? "bg-indigo-600 text-white shadow-sm"
+                  : "bg-white text-slate-700 hover:bg-slate-50 border border-slate-200"
+              }`}
+            >
+              {s.name} (Seller {s.id})
+            </Link>
+          ))}
+        </div>
+      </div>
+
+      {/* رأس الصفحة وبيانات التاجر المختار */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Seller Dashboard</h1>
@@ -25,7 +59,7 @@ export default async function SellerDashboardPage() {
         </div>
       </div>
 
-      {/* الكروت الإحصائية السريعة */}
+      {/* الكروت الإحصائية للتاجر المختار */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border bg-white p-5 shadow-sm">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Products</p>
@@ -41,7 +75,7 @@ export default async function SellerDashboardPage() {
         </div>
       </div>
 
-      {/* جدول المنتجات وقواعد التفاوض الخاصة بالبائع */}
+      {/* جدول المنتجات وقواعد التفاوض الخاصة بالتاجر */}
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <div className="border-b bg-slate-50 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-800">My Listed Products & Negotiation Rules</h2>

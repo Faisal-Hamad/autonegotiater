@@ -19,37 +19,23 @@ async def get_seller_dashboard(
     seller_id: int = Query(1, description="ID of the seller"),
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    # التحقق من وجود التاجر
     seller = await session.get(User, seller_id)
     if not seller or seller.role != "seller":
         raise HTTPException(status_code=404, detail="Seller not found")
 
-    # جلب منتجات هذا التاجر
-    products_stmt = (
-        select(Product)
-        .where(Product.seller_id == seller_id)
-        .order_by(Product.id.desc())
-    )
+    products_stmt = select(Product).where(Product.seller_id == seller_id).order_by(Product.id.desc())
     products = (await session.scalars(products_stmt)).all()
     product_ids = [p.id for p in products]
 
-    # جلب قواعد التفاوض الخاصة بالمنتجات
     rules_stmt = select(SellerRule).where(SellerRule.product_id.in_(product_ids)) if product_ids else None
     rules_map = {}
     if rules_stmt is not None:
         rules = (await session.scalars(rules_stmt)).all()
         rules_map = {r.product_id: r for r in rules}
 
-    # جلب جلسات التفاوض على منتجات التاجر
-    sessions_stmt = (
-        select(NegotiationSession)
-        .where(NegotiationSession.product_id.in_(product_ids))
-        .order_by(NegotiationSession.id.desc())
-    ) if product_ids else None
-    
+    sessions_stmt = select(NegotiationSession).where(NegotiationSession.product_id.in_(product_ids)).order_by(NegotiationSession.id.desc()) if product_ids else None
     sessions = (await session.scalars(sessions_stmt)).all() if sessions_stmt is not None else []
 
-    # إحصائيات سريعة للتاجر
     active_sessions_count = sum(1 for s in sessions if s.status == "active")
     completed_sessions_count = sum(1 for s in sessions if s.status == "completed")
 
@@ -104,16 +90,10 @@ async def get_buyer_dashboard(
     if not buyer or buyer.role != "buyer":
         raise HTTPException(status_code=404, detail="Buyer not found")
 
-    # جلب كل جلسات المشتري
-    sessions_stmt = (
-        select(NegotiationSession)
-        .where(NegotiationSession.buyer_id == buyer_id)
-        .order_by(NegotiationSession.id.desc())
-    )
+    sessions_stmt = select(NegotiationSession).where(NegotiationSession.buyer_id == buyer_id).order_by(NegotiationSession.id.desc())
     sessions = (await session.scalars(sessions_stmt)).all()
     session_ids = [s.id for s in sessions]
 
-    # جلب المنتجات المرتبطة بتلك الجلسات
     product_ids = [s.product_id for s in sessions]
     products_stmt = select(Product).where(Product.id.in_(product_ids)) if product_ids else None
     products_map = {}
@@ -121,12 +101,7 @@ async def get_buyer_dashboard(
         prods = (await session.scalars(products_stmt)).all()
         products_map = {p.id: p for p in prods}
 
-    # جلب الصفقات المنتهية للمشتري
-    deals_stmt = (
-        select(Deal)
-        .where(Deal.session_id.in_(session_ids))
-        .order_by(Deal.id.desc())
-    ) if session_ids else None
+    deals_stmt = select(Deal).where(Deal.session_id.in_(session_ids)).order_by(Deal.id.desc()) if session_ids else None
     deals = (await session.scalars(deals_stmt)).all() if deals_stmt is not None else []
 
     active_count = sum(1 for s in sessions if s.status == "active")
@@ -178,7 +153,6 @@ async def get_buyer_dashboard(
 async def get_admin_dashboard(
     session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
-    # إحصائيات عامة للنظام
     total_users = await session.scalar(select(func.count(User.id))) or 0
     total_buyers = await session.scalar(select(func.count(User.id)).where(User.role == "buyer")) or 0
     total_sellers = await session.scalar(select(func.count(User.id)).where(User.role == "seller")) or 0
@@ -187,7 +161,10 @@ async def get_admin_dashboard(
     active_sessions = await session.scalar(select(func.count(NegotiationSession.id)).where(NegotiationSession.status == "active")) or 0
     completed_deals = await session.scalar(select(func.count(Deal.id))) or 0
 
-    # آخر العمليات من سجل التدقيق
+    # سحب جميع المستخدمين المسجلين في النظام
+    users_stmt = select(User).order_by(User.id)
+    users = (await session.scalars(users_stmt)).all()
+
     audit_stmt = select(AuditLog).order_by(AuditLog.id.desc()).limit(15)
     audit_logs = (await session.scalars(audit_stmt)).all()
 
@@ -201,6 +178,18 @@ async def get_admin_dashboard(
             "active_sessions": active_sessions,
             "completed_deals": completed_deals,
         },
+        "users": [
+            {
+                "id": u.id,
+                "name": f"{u.first_name} {u.last_name}",
+                "email": u.email,
+                "phone": u.phone,
+                "role": u.role,
+                "is_active": u.is_active,
+                "registered_at": u.registered_at.strftime("%Y-%m-%d") if u.registered_at else None,
+            }
+            for u in users
+        ],
         "recent_audit_logs": [
             {
                 "id": log.id,
