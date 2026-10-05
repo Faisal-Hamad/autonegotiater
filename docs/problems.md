@@ -68,6 +68,16 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Cause:** The server has no IPv6 address.
 - **Fix:** None needed. Cloudflare talks to the server over IPv4, so visitors are not affected.
 
+### 18. Nginx returns `502 Bad Gateway` after recreating an upstream container
+- **Problem:** Requests to `https://autonegotiater.com/api/docs` returned `502 Bad Gateway` after recreating the `fastapi` container.
+- **Cause:** Nginx resolves and caches upstream container IP addresses at startup. When `fastapi` was recreated, Podman assigned it a new internal IP address, leaving Nginx attempting to connect to the stale IP.
+- **Fix:** Restart Nginx using `podman restart autoneg-nginx` after recreating any upstream container.
+
+### 19. `podman rm -f` fails due to container dependencies
+- **Problem:** Running `podman rm -f autoneg-nextjs` failed with `Error: container ... has dependent containers which must be removed before it: ... (autoneg-nginx)`.
+- **Cause:** In `compose.yaml`, `autoneg-nginx` depends on `autoneg-nextjs`. Podman enforces dependency integrity and prevents removing an upstream service while dependent downstream containers exist.
+- **Fix:** Use `podman-compose -f infra/compose.yaml down && podman-compose -f infra/compose.yaml up -d` to stop and recreate services in topological order, or remove dependent containers simultaneously.
+
 ---
 
 ## Backend
@@ -81,6 +91,15 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Problem:** `alembic upgrade head` raised `ModuleNotFoundError: No module named 'app'`.
 - **Cause:** The `alembic` command does not add the project folder to `sys.path`.
 - **Fix:** Add `prepend_sys_path = .` to `alembic.ini`.
+
+---
+
+## Frontend
+
+### 20. Red syntax errors across JSX/TSX elements in VS Code
+- **Problem:** Opening `.tsx` files in VS Code displayed syntax errors and missing types on all standard HTML elements (`<div>`, `<h1>`, `Link`).
+- **Cause:** The repository was freshly cloned on a Windows host without installing local dependencies, so `node_modules` and React/Next.js type declarations (`@types/react`) were missing locally.
+- **Fix:** Either run `npm install` inside `frontend/` locally to populate type definitions, or rely on containerized builds where dependencies are managed inside the container via `Containerfile`.
 
 ---
 
@@ -105,3 +124,8 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Problem:** The deploy job failed with `deploy@server: Permission denied (publickey,...)`.
 - **Cause:** `github_actions.pub` was in the `authorized_keys` file of `ec2-user`, not `deploy`.
 - **Fix:** Add the key to `/home/deploy/.ssh/authorized_keys`, run `chmod 600` on the file, then run `restorecon -Rv` on the folder (needed for SELinux).
+
+### 21. `git pull` on server fails with divergent branches
+- **Problem:** Running `git pull` on the production server failed with `fatal: Need to specify how to reconcile divergent branches`.
+- **Cause:** The remote branch was updated with new commits or forced updates, causing the server's tracking branch to diverge from `origin/main`.
+- **Fix:** Align the server working tree directly with the remote repository using `git fetch origin && git reset --hard origin/main`. Production servers should track origin without manual merges.
