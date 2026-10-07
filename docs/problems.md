@@ -129,3 +129,8 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Problem:** Running `git pull` on the production server failed with `fatal: Need to specify how to reconcile divergent branches`.
 - **Cause:** The remote branch was updated with new commits or forced updates, causing the server's tracking branch to diverge from `origin/main`.
 - **Fix:** Align the server working tree directly with the remote repository using `git fetch origin && git reset --hard origin/main`. Production servers should track origin without manual merges.
+
+### 22. Deploy fails with `Connection timed out`, then `Host key verification failed`
+- **Problem:** After the server was stopped and started, the deploy job failed with `ssh: connect to host ... Connection timed out`. After `SSH_HOST` was updated, it failed with `Host key verification failed`.
+- **Cause:** The instance has no Elastic IP, so it got a new public IP when it started. `SSH_HOST` still pointed to the old IP, and after that was fixed, `SSH_KNOWN_HOSTS` still only had entries for the old IP.
+- **Fix:** Update `SSH_HOST` to the new IP, and replace `SSH_KNOWN_HOSTS` with the output of `ssh-keyscan <new-ip>` (or `/etc/ssh/ssh_host_*_key.pub` on the server, each line prefixed with the IP). Run a new workflow, not a re-run of the failed one. To stop the IP from changing, attach an Elastic IP to the instance.
