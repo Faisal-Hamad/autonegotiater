@@ -67,7 +67,11 @@ jobs:
           SERVICES: ${{ steps.changes.outputs.services }}
           NGINX: ${{ steps.changes.outputs.nginx }}
         run: |
-          ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o IdentitiesOnly=yes -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
+          # Print the runner's public IP so a timeout can be checked against the server firewall.
+          echo "Runner public IP: $(curl -fsS https://api.ipify.org || echo unknown)"
+          ssh -i ~/.ssh/id_deploy -o BatchMode=yes -o IdentitiesOnly=yes \
+            -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=10 \
+            -p "${SSH_PORT:-22}" "$SSH_USER@$SSH_HOST" \
             "PROJECT_DIR='$PROJECT_DIR' SERVICES='$SERVICES' NGINX='$NGINX' bash -s" <<'REMOTE'
           set -euo pipefail
           export XDG_RUNTIME_DIR=/run/user/$(id -u)
