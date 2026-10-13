@@ -1,3 +1,5 @@
+import { DemoScreen } from "@/components/demo-pages";
+import { isMockDataEnabled } from "@/lib/api";
 import { getSellerDashboard } from "@/lib/api";
 import Link from "next/link";
 
@@ -16,13 +18,14 @@ export default async function SellerDashboardPage({
 }: {
   searchParams: Promise<{ id?: string }>;
 }) {
+  if (isMockDataEnabled()) return <DemoScreen role="seller"/>;
   const params = await searchParams;
   const currentSellerId = params?.id ? parseInt(params.id, 10) || 1 : 1;
   const data = await getSellerDashboard(currentSellerId);
 
   return (
     <div className="space-y-8 py-6">
-      {/* شريط اختيار وتبديل التاجر */}
+      {/* Seller selection and switching */}
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl bg-slate-100 p-3 border border-slate-200">
         <span className="text-xs font-semibold uppercase tracking-wider text-slate-600">
           Switch Demo Seller:
@@ -44,7 +47,7 @@ export default async function SellerDashboardPage({
         </div>
       </div>
 
-      {/* رأس الصفحة وبيانات التاجر المختار */}
+      {/* Selected Seller header and details */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Seller Dashboard</h1>
@@ -59,7 +62,7 @@ export default async function SellerDashboardPage({
         </div>
       </div>
 
-      {/* الكروت الإحصائية للتاجر المختار */}
+      {/* Selected Seller statistics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border bg-white p-5 shadow-sm">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Products</p>
@@ -70,12 +73,12 @@ export default async function SellerDashboardPage({
           <p className="mt-2 text-3xl font-bold text-indigo-600">{data.stats.active_negotiations}</p>
         </div>
         <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Completed Deals</p>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Completed Agreements</p>
           <p className="mt-2 text-3xl font-bold text-emerald-600">{data.stats.completed_deals}</p>
         </div>
       </div>
 
-      {/* جدول المنتجات وقواعد التفاوض الخاصة بالتاجر */}
+      {/* Seller products and negotiation rules table */}
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <div className="border-b bg-slate-50 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-800">My Listed Products & Negotiation Rules</h2>

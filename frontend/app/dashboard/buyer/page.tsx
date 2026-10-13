@@ -1,3 +1,5 @@
+import { DemoScreen } from "@/components/demo-pages";
+import { isMockDataEnabled } from "@/lib/api";
 import { getBuyerDashboard } from "@/lib/api";
 import Link from "next/link";
 
@@ -6,11 +8,12 @@ export const dynamic = "force-dynamic";
 const sar = new Intl.NumberFormat("en-SA", { style: "currency", currency: "SAR", maximumFractionDigits: 0 });
 
 export default async function BuyerDashboardPage() {
+  if (isMockDataEnabled()) return <DemoScreen role="buyer"/>;
   const data = await getBuyerDashboard(4); // Buyer 4 (Noura Alshammari)
 
   return (
     <div className="space-y-8 py-6">
-      {/* رأس الصفحة وبيانات المشتري */}
+      {/* Buyer header and account details */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">Buyer Dashboard</h1>
@@ -26,23 +29,23 @@ export default async function BuyerDashboardPage() {
         </Link>
       </div>
 
-      {/* الكروت الإحصائية السريعة */}
+      {/* Summary statistics */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-xl border bg-white p-5 shadow-sm">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Active Negotiations</p>
           <p className="mt-2 text-3xl font-bold text-indigo-600">{data.stats.active_negotiations}</p>
         </div>
         <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Closed Deals</p>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Completed Agreements</p>
           <p className="mt-2 text-3xl font-bold text-emerald-600">{data.stats.completed_deals}</p>
         </div>
         <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Sessions</p>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Negotiation Sessions</p>
           <p className="mt-2 text-3xl font-bold text-slate-900">{data.stats.total_sessions}</p>
         </div>
       </div>
 
-      {/* جدول جلسات التفاوض */}
+      {/* Negotiation Sessions table */}
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <div className="border-b bg-slate-50 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-800">My Negotiation Sessions</h2>

@@ -1,13 +1,16 @@
+import { DemoScreen } from "@/components/demo-pages";
+import { isMockDataEnabled } from "@/lib/api";
 import { getAdminDashboard } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboardPage() {
+  if (isMockDataEnabled()) return <DemoScreen role="admin"/>;
   const data = await getAdminDashboard();
 
   return (
     <div className="space-y-8 py-6">
-      {/* رأس الصفحة */}
+      {/* Page header */}
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between border-b pb-4">
         <div>
           <h1 className="text-3xl font-bold text-slate-900">System Administration</h1>
@@ -18,7 +21,7 @@ export default async function AdminDashboardPage() {
         </span>
       </div>
 
-      {/* كروت الإحصائيات الشاملة للنظام */}
+      {/* System summary statistics */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-xl border bg-white p-5 shadow-sm">
           <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Total Users</p>
@@ -38,13 +41,13 @@ export default async function AdminDashboardPage() {
           <p className="mt-1 text-xs text-indigo-500">{data.metrics.active_sessions} currently live</p>
         </div>
         <div className="rounded-xl border bg-white p-5 shadow-sm">
-          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Deals Finalized</p>
+          <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">Agreements Finalized</p>
           <p className="mt-2 text-2xl font-bold text-emerald-600">{data.metrics.completed_deals}</p>
           <p className="mt-1 text-xs text-emerald-500">Successful agreements</p>
         </div>
       </div>
 
-      {/* جدول جميع المستخدمين المسجلين في النظام */}
+      {/* Registered users table */}
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <div className="border-b bg-slate-50 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-800">Registered Platform Users</h2>
@@ -105,7 +108,7 @@ export default async function AdminDashboardPage() {
         </div>
       </div>
 
-      {/* جدول سجل التدقيق الأمني (Audit Logs) */}
+      {/* Security audit log table */}
       <div className="rounded-xl border bg-white shadow-sm overflow-hidden">
         <div className="border-b bg-slate-50 px-6 py-4">
           <h2 className="text-lg font-bold text-slate-800">Security & Activity Audit Logs</h2>

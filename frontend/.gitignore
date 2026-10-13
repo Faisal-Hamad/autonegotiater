@@ -1,0 +1,2 @@
+# Keep the local development data-source setting off GitHub.
+.env.local
