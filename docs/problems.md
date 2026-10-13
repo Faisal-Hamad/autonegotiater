@@ -1,3 +1,4 @@
+
 # AutoNegotiater — Problems Log
 
 A shared log of the problems we ran into and how we fixed them. Add new entries under the matching section, using the same format:
@@ -78,6 +79,21 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Cause:** In `compose.yaml`, `autoneg-nginx` depends on `autoneg-nextjs`. Podman enforces dependency integrity and prevents removing an upstream service while dependent downstream containers exist.
 - **Fix:** Use `podman-compose -f infra/compose.yaml down && podman-compose -f infra/compose.yaml up -d` to stop and recreate services in topological order, or remove dependent containers simultaneously.
 
+### 25. Frontend changes do not appear after rebuilding the image
+- **Problem:** The frontend image was rebuilt successfully, but the website continued displaying the previous interface.
+- **Cause:** The running `autoneg-nextjs` container was still using the old image ID, even though `localhost/autoneg-frontend:latest` pointed to the newly built image.
+- **Fix:** Compare the running container image ID using `podman inspect autoneg-nextjs --format '{{.Image}}'` with the latest image ID using `podman image inspect localhost/autoneg-frontend:latest --format '{{.Id}}'`. Recreate the Next.js container to use the updated image.
+
+### 26. Podman cannot recreate Next.js because of dependent containers
+- **Problem:** Running `podman-compose -f infra/compose.yaml up -d --no-deps --force-recreate nextjs` failed with `container has dependent containers which must be removed before it` and `container name "autoneg-nextjs" is already in use`.
+- **Cause:** The `autoneg-nginx` container depended on `autoneg-nextjs`. Podman prevented replacing Next.js while its dependent container still existed.
+- **Fix:** Stop and remove `autoneg-nginx`, then stop and remove `autoneg-nextjs`. Recreate Next.js using `podman-compose -f infra/compose.yaml up -d --no-deps nextjs`, followed by recreating Nginx using `podman-compose -f infra/compose.yaml up -d --no-deps nginx`. The backend and database containers were left untouched.
+
+### 27. Website temporarily unavailable during frontend container replacement
+- **Problem:** Replacing the Next.js container required stopping and removing the Nginx container, temporarily interrupting website access.
+- **Cause:** Nginx was the public-facing reverse proxy and had a Podman dependency on Next.js.
+- **Fix:** Start the updated Next.js container first, then recreate Nginx. Verify the deployment using `curl -k -I https://127.0.0.1`, which returned `HTTP/2 200`. The updated frontend image was confirmed to be running.
+
 ---
 
 ## Backend
@@ -100,6 +116,16 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Problem:** Opening `.tsx` files in VS Code displayed syntax errors and missing types on all standard HTML elements (`<div>`, `<h1>`, `Link`).
 - **Cause:** The repository was freshly cloned on a Windows host without installing local dependencies, so `node_modules` and React/Next.js type declarations (`@types/react`) were missing locally.
 - **Fix:** Either run `npm install` inside `frontend/` locally to populate type definitions, or rely on containerized builds where dependencies are managed inside the container via `Containerfile`.
+
+### 23. Git commit fails with Author identity unknown
+- **Problem:** Running `git commit` on Windows failed with `Author identity unknown` and `fatal: unable to auto-detect email address`.
+- **Cause:** Git did not have a configured username and email address for the local repository.
+- **Fix:** Configure the repository identity using `git config user.name "Rayan-Alharbi1"` and `git config user.email "r.alhrbi@outlook.sa"`, then run the commit again.
+
+### 24. Git warns about LF being replaced by CRLF
+- **Problem:** Running `git add frontend/` displayed multiple warnings: `LF will be replaced by CRLF the next time Git touches it`.
+- **Cause:** Git detected differences between Unix (LF) and Windows (CRLF) line-ending conventions.
+- **Fix:** Treat these messages as line-ending warnings rather than commit errors. The files were staged and committed successfully without changing the application code.
 
 ---
 
