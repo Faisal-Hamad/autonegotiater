@@ -4,7 +4,7 @@ from sqlalchemy import text
 
 from app.config import settings
 from app.db import engine
-from app.routers import dashboard, products
+from app.routers import dashboard, products, workspace
 
 app = FastAPI(title="AutoNegotiater API", root_path="/api", docs_url="/docs", openapi_url="/openapi.json")
 
@@ -16,9 +16,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# تفعيل مسارات المنتجات والداشبورد
 app.include_router(products.router)
 app.include_router(dashboard.router)
+app.include_router(workspace.router)
 
 
 @app.get("/health")

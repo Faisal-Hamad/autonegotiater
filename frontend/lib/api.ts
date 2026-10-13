@@ -40,10 +40,6 @@ export async function getProduct(id: number): Promise<Product | null> {
   return res.json();
 }
 
-// ==========================================
-// Fetch functions for the three role dashboards
-// ==========================================
-
 export async function getSellerDashboard(sellerId = 1) {
   if (isMockDataEnabled()) {
     const { getMockSellerDashboard } = await import("./mock-data");
@@ -72,4 +68,23 @@ export async function getAdminDashboard() {
   const res = await fetch(`${API_URL}/dashboard/admin`, { cache: "no-store" });
   if (!res.ok) throw new Error(`Failed to load admin dashboard (${res.status})`);
   return res.json();
+}
+
+export async function getWorkspaceBootstrap() {
+  if (isMockDataEnabled()) {
+    const { mockProducts } = await import("./mock-data");
+    const { initialDemoState } = await import("./demo-model");
+    return structuredClone(initialDemoState(mockProducts));
+  }
+  try {
+    const res = await fetch(`${API_URL}/workspace/bootstrap`, { cache: "no-store" });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch {
+    // Fallback during container static build step when backend is not yet connected
+  }
+  const products = await getProducts().catch(() => []);
+  const { initialDemoState } = await import("./demo-model");
+  return structuredClone(initialDemoState(products));
 }
