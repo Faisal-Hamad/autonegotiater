@@ -87,7 +87,24 @@ jobs:
             $compose up -d --build --force-recreate
           elif [ -n "$SERVICES" ]; then
             echo "Rebuilding: $SERVICES"
-            $compose up -d --build --force-recreate --no-deps $SERVICES
+            $compose build $SERVICES
+            # Podman refuses to replace a container that others depend on
+            # (problems.md 19 and 26): nginx -> nextjs -> fastapi. Remove the
+            # dependents first, then recreate everything that was removed.
+            targets="$SERVICES"
+            case " $SERVICES " in *" fastapi "*) targets="$targets nextjs";; esac
+            podman rm -f autoneg-nginx
+            for s in nextjs celery-worker fastapi; do
+              case " $targets " in
+                *" $s "*) podman rm -f "autoneg-${s%-worker}" ;;
+              esac
+            done
+            for s in fastapi celery-worker nextjs; do
+              case " $targets " in
+                *" $s "*) $compose up -d --no-deps "$s" ;;
+              esac
+            done
+            $compose up -d --no-deps nginx
           else
             echo "No service code changed, nothing to rebuild"
           fi

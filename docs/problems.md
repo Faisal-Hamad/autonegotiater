@@ -160,3 +160,8 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Problem:** After the server was stopped and started, the deploy job failed with `ssh: connect to host ... Connection timed out`. After `SSH_HOST` was updated, it failed with `Host key verification failed`.
 - **Cause:** The instance has no Elastic IP, so it got a new public IP when it started. `SSH_HOST` still pointed to the old IP, and after that was fixed, `SSH_KNOWN_HOSTS` still only had entries for the old IP.
 - **Fix:** Update `SSH_HOST` to the new IP, and replace `SSH_KNOWN_HOSTS` with the output of `ssh-keyscan <new-ip>` (or `/etc/ssh/ssh_host_*_key.pub` on the server, each line prefixed with the IP). Run a new workflow, not a re-run of the failed one. To stop the IP from changing, attach an Elastic IP to the instance.
+
+### 28. Deploy reports success but FastAPI keeps running the old code
+- **Problem:** After a backend change, the deploy job finished, but the new API routes returned 404 and the database migration did not run. `podman ps` showed `autoneg-fastapi` still had last week's creation date, while `autoneg-celery` and `autoneg-nextjs` were new.
+- **Cause:** `up -d --build --force-recreate --no-deps fastapi` failed with `has dependent containers which must be removed before it`, because `nextjs` and `nginx` depend on `fastapi` (same cause as 19 and 26). `podman-compose` does not return an error code for this, so the job still passed.
+- **Fix:** The workflow now builds the images first, removes `nginx`, then the rebuilt services (and `nextjs` when `fastapi` is rebuilt), and recreates them in dependency order. To check a deploy, compare the `Created` column of `podman ps --format '{{.Names}}\t{{.Created}}'`.
