@@ -5,7 +5,7 @@ import { useState, type FormEvent } from "react";
 import { useDemo } from "./demo-provider";
 import { Badge, BackendPending, Empty, Heading, Stats } from "./ui";
 import { ProductDetails } from "./products";
-import { SessionDetail } from "./negotiation";
+import { RequestDetail, SessionDetail } from "./negotiation";
 import { AdminReports } from "./admin-reports";
 import { money, negotiationRoundCount, visibleDeals, visibleSessions, type Role } from "@/lib/demo-model";
 
@@ -212,6 +212,31 @@ export function DemoScreen({ role, segments = [] }: {
     const base = `/dashboard/${role}`;
     if (section === "negotiations" && segments[1])
         return <SessionDetail id={id}/>;
+    if (role === "buyer" && section === "requests" && segments[1])
+        return <RequestDetail id={id}/>;
+    if (role === "buyer" && section === "requests")
+        return <>
+        <Heading title="Multi-seller Requests" description="Each request negotiates with several sellers at once and keeps the best offer." action={<Link className="btn" href="/products">Compare listings →</Link>}/>
+        {state.requests.length ? <div className="panel table-wrap">
+            <table>
+            <thead>
+            <tr>
+            <th>Request</th>
+            <th>Listings</th>
+            <th>Mode</th>
+            <th>Status</th>
+            <th>Details</th>
+            </tr>
+            </thead>
+            <tbody>{state.requests.map(r => <tr key={r.id}>
+                <td>#{r.id}</td>
+                <td>{r.productIds.map(pid => state.products.find(p => p.id === pid)?.name ?? "Listing").join(", ")}</td>
+                <td>{r.mode.replaceAll("_", " ")}</td>
+                <td><Badge>{r.status.replaceAll("_", " ")}</Badge></td>
+                <td><Link className="text-indigo-600" href={`${base}/requests/${r.id}`}>Open →</Link></td>
+                </tr>)}</tbody>
+            </table>
+            </div> : <Empty title="No multi-seller requests yet" description="In the marketplace, tick Compare on 2 to 5 listings, then choose Negotiate with these sellers." href="/products" label="Browse listings"/>}</>;
     if (section === "deals" && segments[1])
         return <DealDetail id={id}/>;
     if (role === "seller" && section === "products" && segments[1] === "new")
@@ -248,7 +273,7 @@ export function DemoScreen({ role, segments = [] }: {
         <label>Search Negotiation Sessions<input value={filter} onChange={e => setFilter(e.target.value)} placeholder="Product or session number"/>
         </label>
         <label>Status<select value={status} onChange={e => setStatus(e.target.value)}>
-        <option value="">All statuses</option>{['active', 'awaiting_approval', 'completed', 'failed', 'cancelled', 'rejected'].map(s => <option key={s}>{s}</option>)}</select>
+        <option value="">All statuses</option>{['active', 'awaiting_approval', 'completed', 'failed', 'cancelled', 'rejected', 'not_selected'].map(s => <option key={s}>{s}</option>)}</select>
         </label>
         </div>{rows.length ? <div className="panel table-wrap">
             <table>

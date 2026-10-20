@@ -21,6 +21,8 @@ export type Round = {
     action: "offer" | "counteroffer" | "accept";
     price: number;
     message: string;
+    // Buyer-side value of this offer (0-1) in a multi-seller request. Buyer-only.
+    utility?: number;
 };
 export type Session = {
     id: number;
@@ -28,8 +30,10 @@ export type Session = {
     productId: number;
     budget: number;
     mode: "semi_automated" | "automated";
-    status: "active" | "awaiting_approval" | "completed" | "failed" | "cancelled" | "rejected";
+    status: "active" | "awaiting_approval" | "completed" | "failed" | "cancelled" | "rejected" | "not_selected";
     scenario: "agreement" | "failed" | "rejection" | "cancellation";
+    // Set when this session is one of the sellers in a multi-seller request.
+    requestId?: number;
     agreedPrice?: number;
     failureReason?: string;
     // Engine-only snapshots. Never passed to a role-specific view.
@@ -59,6 +63,20 @@ export type Deal = {
     rating?: number;
     feedback?: string;
 };
+// One buyer, many sellers: one session per selected listing.
+export type BuyerRequest = {
+    id: number;
+    buyerId: number;
+    budget: number;
+    mode: "semi_automated" | "automated";
+    status: "active" | "awaiting_approval" | "completed" | "failed" | "cancelled";
+    priceWeight: number;
+    productIds: number[]; // most preferred first
+    sessionIds: number[];
+    warranty: number;
+    delivery: string;
+    createdAt: string;
+};
 export type Notice = {
     id: number;
     userId: number;
@@ -77,6 +95,7 @@ export type DemoState = {
     users: DemoUser[];
     rules: Rule[];
     sessions: Session[];
+    requests?: BuyerRequest[];
     deals: Deal[];
     notices: Notice[];
     audit: Audit[];
@@ -85,8 +104,12 @@ export type SessionView = Omit<Session, "budget" | "privateLimits"> & {
     budget?: number;
     maxRounds: number;
 };
-export type DemoViewState = Omit<DemoState, "sessions"> & {
+export type RequestView = Omit<BuyerRequest, "budget"> & {
+    budget?: number;
+};
+export type DemoViewState = Omit<DemoState, "sessions" | "requests"> & {
     sessions: SessionView[];
+    requests: RequestView[];
 };
 export const demoUsers: DemoUser[] = [
     { id: 1, name: "Ahmed Alharbi", email: "seller1@demo.autonegotiater.com", role: "seller", active: true },
@@ -97,7 +120,7 @@ export const demoUsers: DemoUser[] = [
     { id: 6, name: "Demo Administrator", email: "admin@demo.autonegotiater.com", role: "admin", active: true },
 ];
 export function initialDemoState(products: Product[]): DemoState {
-    return { products: structuredClone(products), users: structuredClone(demoUsers), rules: products.map(p => ({ productId: p.id, minimum: Number((Number(p.base_price) * .8).toFixed(2)), discount: 20, rounds: 4, threshold: Number((Number(p.base_price) * .95).toFixed(2)), enabled: true })),
+    return { products: structuredClone(products), users: structuredClone(demoUsers), requests: [], rules: products.map(p => ({ productId: p.id, minimum: Number((Number(p.base_price) * .8).toFixed(2)), discount: 20, rounds: 4, threshold: Number((Number(p.base_price) * .95).toFixed(2)), enabled: true })),
         sessions: [{ id: 101, buyerId: 4, productId: 1, budget: 3500, mode: "semi_automated", status: "active", scenario: "agreement", warranty: 1, delivery: "Pickup within 3 days", rounds: [], createdAt: "2026-10-13T08:00:00Z" }, { id: 102, buyerId: 4, productId: 3, budget: 1900, mode: "semi_automated", status: "completed", scenario: "agreement", agreedPrice: 1850, warranty: 0, delivery: "Buyer pickup", rounds: [{ number: 1, agent: "buyer", action: "offer", price: 1800, message: "Opening proposal for this demo listing." }, { number: 1, agent: "seller", action: "counteroffer", price: 1850, message: "I propose a revised price for the same terms." }, { number: 1, agent: "buyer", action: "accept", price: 1850, message: "I accept the seller's counteroffer." }], createdAt: "2026-10-12T08:00:00Z" }],
         deals: [{ id: 201, sessionId: 102, productId: 3, buyerId: 4, sellerId: 2, price: 1850, listingPrice: 2200, warranty: 0, delivery: "Buyer pickup", createdAt: "2026-10-12T09:00:00Z" }],
         notices: [{ id: 1, userId: 4, text: "A demo negotiation is ready to continue.", href: "/dashboard/buyer/negotiations/101", read: false }, { id: 2, userId: 2, text: "Demo sofa agreement completed.", href: "/dashboard/seller/deals/201", read: false }], audit: [{ id: 1, action: "demo_initialized", time: "2026-10-13T08:00:00Z", reference: 101 }] };
@@ -214,9 +237,17 @@ export function endSession(state: DemoState, id: number, status: "rejected" | "c
 export function projectDemoState(state: DemoState, user: DemoUser): DemoViewState {
     const sessions = state.sessions.filter(s => user.role === "admin" || (user.role === "buyer" ? s.buyerId === user.id : state.products.some(p => p.id === s.productId && p.seller_id === user.id))).map(s => {
         const { budget, privateLimits, ...publicSession } = s;
-        return { ...structuredClone(publicSession), maxRounds: privateLimits?.rounds ?? state.rules.find(r => r.productId === s.productId)?.rounds ?? 4, ...(user.role === "buyer" ? { budget } : {}) };
+        const view = structuredClone(publicSession);
+        // Utility scores reveal the buyer's preferences, so only the buyer sees them.
+        if (user.role !== "buyer")
+            view.rounds = view.rounds.map(({ utility, ...turn }) => turn);
+        return { ...view, maxRounds: privateLimits?.rounds ?? state.rules.find(r => r.productId === s.productId)?.rounds ?? 4, ...(user.role === "buyer" ? { budget } : {}) };
     });
-    return { products: structuredClone(state.products), users: structuredClone(state.users), audit: structuredClone(state.audit), sessions,
+    const requests = (state.requests ?? []).filter(r => user.role === "admin" || (user.role === "buyer" && r.buyerId === user.id)).map(r => {
+        const { budget, ...publicRequest } = r;
+        return { ...structuredClone(publicRequest), ...(user.role === "buyer" ? { budget } : {}) };
+    });
+    return { products: structuredClone(state.products), users: structuredClone(state.users), audit: structuredClone(state.audit), sessions, requests,
         rules: user.role === "seller" ? structuredClone(state.rules.filter(r => state.products.some(p => p.id === r.productId && p.seller_id === user.id))) : [],
         deals: structuredClone(visibleDeals(state, user)), notices: structuredClone(state.notices.filter(n => n.userId === user.id)) };
 }

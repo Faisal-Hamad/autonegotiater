@@ -18,7 +18,7 @@ export function ProductImage({ product }: {
 export function ProductCatalog({ products: realProducts }: {
     products: Product[];
 }) {
-    const { enabled, state } = useDemo();
+    const { enabled, state, user } = useDemo();
     const products = enabled ? state.products : realProducts;
     const [query, setQuery] = useState("");
     const [category, setCategory] = useState("");
@@ -27,6 +27,7 @@ export function ProductCatalog({ products: realProducts }: {
     const [compare, setCompare] = useState<number[]>([]);
     const filtered = products.filter(p => (!category || p.category === category) && (!stock || p.stock_quantity > 0) && `${p.name} ${p.description ?? ""} ${p.category}`.toLowerCase().includes(query.trim().toLowerCase())).sort((a, b) => sort === "price-asc" ? Number(a.base_price) - Number(b.base_price) : sort === "price-desc" ? Number(b.base_price) - Number(a.base_price) : sort === "name" ? a.name.localeCompare(b.name) : sort === "newest" ? Date.parse(b.created_at) - Date.parse(a.created_at) : a.id - b.id);
     const selected = products.filter(p => compare.includes(p.id));
+    const available = selected.filter(p => p.stock_quantity > 0);
     return <>
     <Heading eyebrow="Marketplace" title="Find your next great deal" description="Explore public listing prices. Choose an item, set your preferences, and delegate the bargaining."/>
  <div className="panel mb-6">
@@ -54,10 +55,10 @@ export function ProductCatalog({ products: realProducts }: {
  <p className="muted text-sm mb-4">{filtered.length} of {products.length} products · Search and sorting apply to the loaded catalog.</p>
  {selected.length > 0 && <div className="panel mb-6">
         <div className="flex justify-between gap-3 mb-3">
-        <h2>Compare public listings ({selected.length}/3)</h2>
+        <h2>Compare public listings ({selected.length}/5)</h2>
         <button onClick={() => setCompare([])} className="text-sm text-indigo-600">Clear comparison</button>
         </div>
-        <p className="muted text-sm mb-4">These are different products, not competing seller offers for the same item. Multi-seller offer data is not available.</p>
+        <p className="muted text-sm mb-4">Select 2 to 5 listings that would all satisfy you. Your agent negotiates with each seller at once and keeps the best offer.</p>
         <div className="table-wrap">
         <table>
         <thead>
@@ -78,6 +79,7 @@ export function ProductCatalog({ products: realProducts }: {
             </tr>)}</tbody>
         </table>
         </div>
+        {enabled && user.role === "buyer" && <div className="mt-4">{available.length >= 2 ? <Link className="btn" href={`/negotiate?products=${available.map(p => p.id).join(",")}`}>Negotiate with these {available.length} sellers →</Link> : <p className="muted text-sm">Select at least two in-stock listings to negotiate with several sellers.</p>}</div>}
         </div>}
  {filtered.length ? <div className="product-grid">{filtered.map(p => <article key={p.id} className="panel flex flex-col gap-4">
             <Link href={`/products/${p.id}`} aria-label={`View ${p.name}`}>
@@ -96,7 +98,7 @@ export function ProductCatalog({ products: realProducts }: {
             </div>
             <Link className="btn-secondary" href={`/products/${p.id}`}>View details →</Link>
             <label className="flex gap-2 items-center text-xs">
-            <input className="w-auto" type="checkbox" checked={compare.includes(p.id)} disabled={!compare.includes(p.id) && compare.length >= 3} onChange={e => setCompare(e.target.checked ? [...compare, p.id] : compare.filter(id => id !== p.id))}/>Compare listing</label>
+            <input className="w-auto" type="checkbox" checked={compare.includes(p.id)} disabled={!compare.includes(p.id) && compare.length >= 5} onChange={e => setCompare(e.target.checked ? [...compare, p.id] : compare.filter(id => id !== p.id))}/>Compare listing</label>
             </article>)}</div> : <Empty title="No matching products" description="Try another keyword or clear the filters."/>}</>;
 }
 export function ProductDetails({ product: original }: {
@@ -115,7 +117,7 @@ export function ProductDetails({ product: original }: {
     <p className="muted text-sm mt-1">Public listing price · SAR</p>
     <p className="mt-5 text-sm">{p.stock_quantity > 0 ? `${p.stock_quantity} units available` : "Out of stock"}</p>
     <p className="mt-5 muted whitespace-pre-wrap">{p.description || "No description provided."}</p>
-    <div className="mt-8">{p.stock_quantity < 1 ? <button className="btn w-full" disabled>Out of stock</button> : enabled && user.role === "buyer" ? <Link className="btn w-full" href={`/products/${p.id}/negotiate`}>Start negotiation →</Link> : <p className="panel text-sm">{enabled ? "Switch to a buyer demo identity to start a simulation." : "Negotiation setup requires an authenticated buyer and a future FastAPI endpoint."}</p>}</div>
+    <div className="mt-8">{p.stock_quantity < 1 ? <button className="btn w-full" disabled>Out of stock</button> : enabled && user.role === "buyer" ? <Link className="btn w-full" href={`/products/${p.id}/negotiate`}>Negotiate with this seller only →</Link> : <p className="panel text-sm">{enabled ? "Switch to a buyer demo identity to start a simulation." : "Negotiation setup requires an authenticated buyer and a future FastAPI endpoint."}</p>}</div>
     <p className="muted text-xs mt-4">{enabled ? "Local simulation only. No real AI or transaction." : "No negotiation will start without a supported backend."}</p>
     </div>
     </div>

@@ -12,6 +12,29 @@ from sqlalchemy.orm import Mapped, mapped_column
 from app.db import Base
 
 
+class BuyerRequest(Base):
+    """One buyer negotiating with many sellers: one session per selected listing."""
+
+    __tablename__ = "buyer_requests"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('active', 'awaiting_approval', 'completed', 'failed', 'cancelled')", name="status_valid"
+        ),
+        CheckConstraint("mode IN ('automated', 'semi_automated')", name="mode_valid"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
+    buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    # Private to the buyer — never returned to sellers (NFR-03).
+    max_budget: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    mode: Mapped[str] = mapped_column(String(20))
+    status: Mapped[str] = mapped_column(String(20), server_default="active")
+    # price_weight, ranking (product ids, most preferred first), warranty, delivery.
+    preferences: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
 class NegotiationSession(Base):
     """ERD Table 4.4."""
 
@@ -24,6 +47,8 @@ class NegotiationSession(Base):
     id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     buyer_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id", ondelete="CASCADE"), index=True)
+    # NULL for a one-to-one session.
+    request_id: Mapped[int | None] = mapped_column(ForeignKey("buyer_requests.id", ondelete="CASCADE"), index=True)
     status: Mapped[str] = mapped_column(String(15), server_default="active")
     mode: Mapped[str] = mapped_column(String(20))
     # Private to the buyer — never returned to the seller (NFR-03).
@@ -50,6 +75,8 @@ class Offer(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     status: Mapped[str] = mapped_column(String(15), server_default="pending")
     round_number: Mapped[int] = mapped_column(Integer)
+    # Buyer-side value of this offer (0–1), used to compare offers across sellers.
+    utility_score: Mapped[Decimal | None] = mapped_column(Numeric(5, 4))
 
 
 class Deal(Base):

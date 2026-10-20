@@ -5,6 +5,15 @@ import { initialDemoState, projectDemoState, mergeDemoView, advanceSession, fini
 
 export type NegotiationInput = Pick<Session, "productId" | "budget" | "mode" | "scenario" | "warranty" | "delivery">;
 
+export type RequestInput = {
+    productIds: number[]; // most preferred first
+    budget: number;
+    mode: "semi_automated" | "automated";
+    priceWeight: number;
+    warranty: number;
+    delivery: string;
+};
+
 type ProductInput = {
     id?: number;
     name: string;
@@ -37,6 +46,10 @@ type Context = {
     advanceNegotiation: (id: number) => Promise<void>;
     approveNegotiation: (id: number) => Promise<void>;
     endNegotiation: (id: number, status: "rejected" | "cancelled") => Promise<void>;
+    createRequest: (input: RequestInput) => Promise<{ id: number } | { error: string }>;
+    advanceRequest: (id: number) => Promise<void>;
+    approveRequest: (id: number) => Promise<void>;
+    endRequest: (id: number, status: "rejected" | "cancelled") => Promise<void>;
     saveProduct: (input: ProductInput) => Promise<boolean>;
     saveRules: (input: RulesInput) => Promise<boolean>;
     saveRating: (dealId: number, rating: number, feedback: string) => Promise<void>;
@@ -166,6 +179,54 @@ export function DemoProvider({ enabled, products, initialData, children }: {
             // Keep optimistic state
         }
     }
+
+    // Multi-seller requests are coordinated by the backend, so there is no local fallback.
+    async function requestAction(path: string, body?: object): Promise<void> {
+        if (!enabled || user.role !== "buyer") return;
+        try {
+            const res = await fetch(`/api/workspace/requests/${path}`, {
+                method: "POST",
+                ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+            });
+            if (!res.ok) {
+                notify("The request could not be updated. Try again.");
+                return;
+            }
+            const nextState = await res.json();
+            if (nextState && Array.isArray(nextState.sessions)) setEngineState(nextState);
+        } catch {
+            notify("The server is unreachable. The request was not updated.");
+        }
+    }
+
+    async function createRequest(input: RequestInput): Promise<{ id: number } | { error: string }> {
+        if (!enabled || user.role !== "buyer") return { error: "Choose a buyer identity first." };
+        try {
+            const res = await fetch("/api/workspace/requests", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    buyer_id: user.id,
+                    product_ids: input.productIds,
+                    budget: Math.floor(input.budget * 100 + 1e-7) / 100,
+                    mode: input.mode,
+                    price_weight: input.priceWeight,
+                    warranty: input.warranty,
+                    delivery: input.delivery,
+                }),
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) return { error: data?.detail ?? "The request could not be created." };
+            if (data?.state) setEngineState(data.state);
+            return { id: Number(data.request_id) };
+        } catch {
+            return { error: "The server is unreachable. Multi-seller negotiation needs the backend." };
+        }
+    }
+
+    const advanceRequest = (id: number) => requestAction(`${id}/advance`);
+    const approveRequest = (id: number) => requestAction(`${id}/approve`);
+    const endRequest = (id: number, status: "rejected" | "cancelled") => requestAction(`${id}/end`, { buyer_id: user.id, status });
 
     async function saveProduct(input: ProductInput): Promise<boolean> {
         const endpoint = input.id ? `/api/workspace/products/${input.id}` : "/api/workspace/products";
@@ -343,6 +404,10 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         advanceNegotiation,
         approveNegotiation,
         endNegotiation,
+        createRequest,
+        advanceRequest,
+        approveRequest,
+        endRequest,
         saveProduct,
         saveRules,
         saveRating,

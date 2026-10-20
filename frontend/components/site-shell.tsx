@@ -5,12 +5,13 @@ import { useState, type ReactNode } from "react";
 import { useDemo } from "./demo-provider";
 
 const sections = {
-    buyer: ["Overview", "Negotiations", "Deals", "Notifications"],
+    buyer: ["Overview", "Requests", "Negotiations", "Deals", "Notifications"],
     seller: ["Overview", "Products", "Negotiations", "Deals", "Notifications"],
     admin: ["Overview", "Users", "Sellers", "Products", "Negotiations", "Reports", "Permissions", "System", "Audit-logs"],
 };
 
 const navigationLabels: Record<string, string> = {
+    Requests: "Multi-seller Requests",
     Negotiations: "Negotiation Sessions",
     Deals: "Agreements",
     "Audit-logs": "Audit Logs",
