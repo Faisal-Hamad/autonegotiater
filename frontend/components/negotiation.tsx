@@ -267,6 +267,8 @@ export function RequestDetail({ id }: {
 }) {
     const { enabled, state, user, advanceRequest, approveRequest, endRequest, notify } = useDemo();
     const [busy, setBusy] = useState(false);
+    // The buyer's pick among the agreed offers; nothing is final until they confirm.
+    const [picked, setPicked] = useState<number | null>(null);
     if (!enabled)
         return <BackendPending />;
     const request = state.requests.find(r => r.id === id);
@@ -284,6 +286,8 @@ export function RequestDetail({ id }: {
     // Offers both agents agreed on; in semi-automated mode the buyer picks one.
     const agreed = rows.filter(s => s.status === "awaiting_approval").map(s => ({ session: s, score: s.rounds.at(-1)?.utility ?? 0 })).sort((a, b) => b.score - a.score);
     const recommended = agreed[0]?.session;
+    const selected = agreed.find(a => a.session.id === picked)?.session ?? recommended;
+    const selectedName = selected && state.products.find(p => p.id === selected.productId)?.name;
     const round = Math.max(0, ...rows.map(s => negotiationRoundCount(s)));
     const deal = chosen && state.deals.find(d => d.sessionId === chosen.id);
     return <>
@@ -310,7 +314,7 @@ export function RequestDetail({ id }: {
         const last = s.rounds.at(-1);
         const buyerTurn = s.rounds.filter(t => t.agent === "buyer").at(-1);
         const sellerTurn = s.rounds.filter(t => t.agent === "seller").at(-1);
-        return <tr key={s.id} className={s.id === chosen?.id || (request.status === "awaiting_approval" && s.id === recommended?.id) ? "bg-emerald-50" : ""}>
+        return <tr key={s.id} className={s.id === chosen?.id || (request.status === "awaiting_approval" && s.id === selected?.id) ? "bg-emerald-50" : ""}>
         <td>#{request.productIds.indexOf(s.productId) + 1}</td>
         <td><Link className="text-indigo-600" href={`/dashboard/buyer/negotiations/${s.id}`}>{p?.name ?? "Listing"}</Link><br /><span className="muted text-xs">Listed {p ? money(p.base_price) : "-"}</span></td>
         <td>{state.users.find(u => u.id === p?.seller_id)?.name ?? "Seller"}</td>
@@ -339,12 +343,16 @@ export function RequestDetail({ id }: {
     {buyer && request.status === "active" && <button className="btn w-full" disabled={busy} onClick={() => run(() => advanceRequest(id))}>{busy ? "Negotiating..." : `Run round ${round + 1} with all sellers`}</button>}
     {buyer && request.status === "awaiting_approval" && agreed.length > 0 && <div className="panel">
     <h2>Choose your offer</h2>
-    <p className="muted text-sm my-3">{agreed.length === 1 ? "One seller agreed." : `${agreed.length} sellers agreed.`} You are not limited to the lowest price: pick the one you want. The other negotiations close without an Agreement.</p>
-    <div className="space-y-3">{agreed.map(({ session: s, score }) => <div key={s.id} className={"rounded-xl border p-4 " + (s.id === recommended?.id ? "border-emerald-300 bg-emerald-50" : "border-slate-200")}>
-        <p className="font-bold">{state.products.find(p => p.id === s.productId)?.name}</p>
-        <p className="text-sm mt-1">{s.agreedPrice !== undefined ? money(s.agreedPrice) : "-"} · score {score.toFixed(2)}{s.id === recommended?.id && <span className="text-emerald-700 font-semibold"> · recommended</span>}</p>
-        <button className={(s.id === recommended?.id ? "btn" : "btn-secondary") + " w-full mt-3"} disabled={busy} onClick={() => run(() => approveRequest(id, s.id), "Agreement confirmed and saved.")}>Choose this offer</button>
-        </div>)}</div>
+    <p className="muted text-sm my-3">{agreed.length === 1 ? "One seller agreed." : `${agreed.length} sellers agreed.`} You are not limited to the lowest price. Select an offer, change it as often as you like, then confirm.</p>
+    <div className="space-y-3" role="radiogroup" aria-label="Agreed offers">{agreed.map(({ session: s, score }) => {
+        const isSelected = s.id === selected?.id;
+        return <button type="button" role="radio" aria-checked={isSelected} key={s.id} disabled={busy} onClick={() => setPicked(s.id)} className={"block w-full text-left rounded-xl border-2 p-4 " + (isSelected ? "border-indigo-500 bg-indigo-50" : "border-slate-200 bg-white hover:border-indigo-200")}>
+        <span className="flex justify-between gap-2"><strong>{state.products.find(p => p.id === s.productId)?.name}</strong><span aria-hidden="true">{isSelected ? "●" : "○"}</span></span>
+        <span className="block text-sm mt-1">{s.agreedPrice !== undefined ? money(s.agreedPrice) : "-"} · score {score.toFixed(2)}{s.id === recommended?.id && <span className="text-emerald-700 font-semibold"> · recommended</span>}</span>
+        </button>;
+    })}</div>
+    {selected && <button className="btn w-full mt-4" disabled={busy} onClick={() => run(() => approveRequest(id, selected.id), "Agreement confirmed and saved.")}>Confirm agreement · {selectedName} · {selected.agreedPrice !== undefined ? money(selected.agreedPrice) : ""}</button>}
+    <p className="muted text-xs mt-2">After you confirm, the Agreement is final and the other negotiations close.</p>
     <button className="btn-danger w-full mt-4" disabled={busy} onClick={() => run(() => endRequest(id, "rejected"), "All offers rejected. No Agreement was created.")}>Reject all offers</button>
     </div>}
     {buyer && ["active", "awaiting_approval"].includes(request.status) && <button className="btn-danger w-full" disabled={busy} onClick={() => run(() => endRequest(id, "cancelled"), "Request cancelled with all sellers.")}>Cancel request</button>}
