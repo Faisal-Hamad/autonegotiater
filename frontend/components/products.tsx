@@ -153,7 +153,7 @@ export function ProductDetails({ product: original }: {
         .filter(other => !sameModelMatches.some(sm => sm.id === other.id) && other.category === p.category)
         .sort((a, b) => Math.abs(Number(a.base_price) - basePrice) - Math.abs(Number(b.base_price) - basePrice));
 
-    const competitors = [...sameModelMatches, ...otherCategoryMatches].slice(0, MAX_SELLERS - 1);
+    const competitors = (sameModelMatches.length > 0 ? sameModelMatches : otherCategoryMatches).slice(0, MAX_SELLERS - 1);
     const quickIds = [p.id, ...competitors.map(c => c.id)];
     const hasSameModel = sameModelMatches.length > 0;
     const targetLabel = modelKey && hasSameModel ? modelKey : p.category;
@@ -203,3 +203,4 @@ export function ProductDetails({ product: original }: {
     </div>
     </>;
 }
+
