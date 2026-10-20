@@ -209,7 +209,7 @@ async def get_admin_dashboard(
                 "user_id": log.user_id,
                 "session_id": log.session_id,
                 "action": log.action,
-                "details": log.details,
+                "details": {k: v for k, v in (log.details or {}).items() if k != "privateLimits"} if isinstance(log.details, dict) else log.details,
                 "timestamp": log.created_at.isoformat() if log.created_at else None,
                 "created_at": log.created_at.isoformat() if log.created_at else None,
             }

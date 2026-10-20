@@ -3,7 +3,7 @@ from decimal import Decimal, ROUND_HALF_UP
 import math
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -83,6 +83,15 @@ class RatingPayload(BaseModel):
     buyer_id: int
     rating: int
     feedback: str = ""
+
+
+def _resolve_viewer_id(viewer_id: int | None = None, x_viewer_id: str | None = None) -> int | None:
+    if viewer_id is not None and viewer_id > 0:
+        return viewer_id
+    if x_viewer_id and x_viewer_id.strip().isdigit():
+        val = int(x_viewer_id.strip())
+        return val if val > 0 else None
+    return None
 
 
 async def ensure_initial_workspace_data(session: AsyncSession) -> None:
@@ -223,7 +232,7 @@ async def ensure_initial_workspace_data(session: AsyncSession) -> None:
     await session.commit()
 
 
-async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
+async def build_workspace_state(session: AsyncSession, viewer_id: int | None = None) -> dict[str, Any]:
     await ensure_initial_workspace_data(session)
 
     users = (await session.scalars(select(User).order_by(User.id))).all()
@@ -235,6 +244,8 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
     ratings = (await session.scalars(select(Rating).order_by(Rating.id.desc()))).all()
     audits = (await session.scalars(select(AuditLog).order_by(AuditLog.id.desc()).limit(200))).all()
     requests = (await session.scalars(select(BuyerRequest).order_by(BuyerRequest.id.desc()))).all()
+
+    viewer = next((u for u in users if u.id == viewer_id), None) if viewer_id is not None else None
 
     products_by_id = {p.id: p for p in products}
     rules_by_pid = {r.product_id: r for r in rules}
@@ -262,6 +273,13 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
 
     out_sessions = []
     for s in sessions:
+        p_obj = products_by_id.get(s.product_id)
+        if viewer is not None:
+            if viewer.role == "buyer" and s.buyer_id != viewer.id:
+                continue
+            if viewer.role == "seller" and (not p_obj or p_obj.seller_id != viewer.id):
+                continue
+
         s_offers = offers_by_session.get(s.id, [])
         meta = session_meta.get(s.id, {})
         rounds = []
@@ -290,8 +308,15 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
                 "price": float(o.price),
                 "message": msg,
             }
-            if o.utility_score is not None:
+            # Utility score is confidential to the buyer (NFR-03).
+            if o.utility_score is not None and (viewer is None or viewer.role == "buyer"):
                 turn["utility"] = float(o.utility_score)
+            if cond.get("competing_offer") is not None:
+                turn["competingOffer"] = float(cond["competing_offer"])
+            if cond.get("leverage_applied"):
+                turn["leverageApplied"] = True
+            if cond.get("scheduled_price") is not None:
+                turn["scheduledPrice"] = float(cond["scheduled_price"])
             rounds.append(turn)
 
         ui_status = s.status
@@ -308,47 +333,58 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
         elif s.status == "cancelled" and meta.get("ui_status") == "not_selected":
             ui_status = "not_selected"
 
+        r_obj = rules_by_pid.get(s.product_id)
+        max_rounds_val = int(r_obj.max_rounds) if r_obj else 4
+        if isinstance(meta.get("privateLimits"), dict) and "rounds" in meta["privateLimits"]:
+            max_rounds_val = int(meta["privateLimits"]["rounds"])
+
         session_dict: dict[str, Any] = {
             "id": s.id,
             "buyerId": s.buyer_id,
             "productId": s.product_id,
-            "budget": float(s.max_budget),
             "mode": s.mode,
             "status": ui_status,
             "scenario": meta.get("scenario", "agreement"),
             "warranty": int(meta.get("warranty", 0)),
             "delivery": str(meta.get("delivery", "Buyer pickup")),
+            "maxRounds": max_rounds_val,
             "rounds": rounds,
             "createdAt": s.started_at.isoformat() if s.started_at else datetime.now(timezone.utc).isoformat(),
         }
+        # Buyer budget is confidential to the owning buyer (NFR-03); never sent to sellers or admins.
+        if viewer is None or (viewer.role == "buyer" and s.buyer_id == viewer.id):
+            session_dict["budget"] = float(s.max_budget)
         if agreed_price is not None:
             session_dict["agreedPrice"] = float(agreed_price)
         if meta.get("failureReason"):
             session_dict["failureReason"] = str(meta["failureReason"])
-        if meta.get("privateLimits"):
-            session_dict["privateLimits"] = meta["privateLimits"]
         if s.request_id is not None:
             session_dict["requestId"] = s.request_id
         out_sessions.append(session_dict)
 
     out_requests = []
     for r in requests:
+        if viewer is not None:
+            if viewer.role == "seller":
+                continue
+            if viewer.role == "buyer" and r.buyer_id != viewer.id:
+                continue
         prefs = r.preferences if isinstance(r.preferences, dict) else {}
-        out_requests.append(
-            {
-                "id": r.id,
-                "buyerId": r.buyer_id,
-                "budget": float(r.max_budget),
-                "mode": r.mode,
-                "status": r.status,
-                "priceWeight": float(prefs.get("price_weight", 0.6)),
-                "productIds": [int(pid) for pid in prefs.get("ranking", [])],
-                "sessionIds": sorted(s.id for s in sessions if s.request_id == r.id),
-                "warranty": int(prefs.get("warranty", 0)),
-                "delivery": str(prefs.get("delivery", "Buyer pickup")),
-                "createdAt": r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat(),
-            }
-        )
+        req_dict: dict[str, Any] = {
+            "id": r.id,
+            "buyerId": r.buyer_id,
+            "mode": r.mode,
+            "status": r.status,
+            "priceWeight": float(prefs.get("price_weight", 0.6)),
+            "productIds": [int(pid) for pid in prefs.get("ranking", [])],
+            "sessionIds": sorted(s.id for s in sessions if s.request_id == r.id),
+            "warranty": int(prefs.get("warranty", 0)),
+            "delivery": str(prefs.get("delivery", "Buyer pickup")),
+            "createdAt": r.created_at.isoformat() if r.created_at else datetime.now(timezone.utc).isoformat(),
+        }
+        if viewer is None or (viewer.role == "buyer" and r.buyer_id == viewer.id):
+            req_dict["budget"] = float(r.max_budget)
+        out_requests.append(req_dict)
 
     ratings_by_deal: dict[int, Rating] = {}
     for r in ratings:
@@ -360,13 +396,20 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
         s_obj = sessions_by_id.get(d.session_id)
         p_obj = products_by_id.get(s_obj.product_id) if s_obj else None
         cond = d.final_conditions if isinstance(d.final_conditions, dict) else {}
+        buyer_id_val = s_obj.buyer_id if s_obj else int(cond.get("buyer_id", 4))
+        seller_id_val = p_obj.seller_id if p_obj else int(cond.get("seller_id", 1))
+        if viewer is not None:
+            if viewer.role == "buyer" and buyer_id_val != viewer.id:
+                continue
+            if viewer.role == "seller" and seller_id_val != viewer.id:
+                continue
         rating_obj = ratings_by_deal.get(d.id)
         deal_dict: dict[str, Any] = {
             "id": d.id,
             "sessionId": d.session_id,
             "productId": s_obj.product_id if s_obj else int(cond.get("product_id", 1)),
-            "buyerId": s_obj.buyer_id if s_obj else int(cond.get("buyer_id", 4)),
-            "sellerId": p_obj.seller_id if p_obj else int(cond.get("seller_id", 1)),
+            "buyerId": buyer_id_val,
+            "sellerId": seller_id_val,
             "price": float(d.final_price),
             "listingPrice": float(cond.get("listing_price", p_obj.base_price if p_obj else d.final_price)),
             "warranty": int(cond.get("warranty", 0)),
@@ -381,15 +424,19 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
 
     notices = []
     nid = 1
-    for s_dict in out_sessions[:15]:
-        p_obj = products_by_id.get(s_dict["productId"])
-        if s_dict["status"] in ("active", "awaiting_approval"):
+    for s in sessions[:25]:
+        p_obj = products_by_id.get(s.product_id)
+        s_offers = offers_by_session.get(s.id, [])
+        ui_st = s.status
+        if s.status == "active" and s_offers and s_offers[-1].status == "accepted":
+            ui_st = "awaiting_approval"
+        if ui_st in ("active", "awaiting_approval"):
             notices.append(
                 {
                     "id": nid,
-                    "userId": s_dict["buyerId"],
-                    "text": f"Negotiation session #{s_dict['id']} for {p_obj.name if p_obj else 'product'} is {s_dict['status'].replace('_', ' ')}.",
-                    "href": f"/dashboard/buyer/negotiations/{s_dict['id']}",
+                    "userId": s.buyer_id,
+                    "text": f"Negotiation session #{s.id} for {p_obj.name if p_obj else 'product'} is {ui_st.replace('_', ' ')}.",
+                    "href": f"/dashboard/buyer/requests/{s.request_id}" if s.request_id else f"/dashboard/buyer/negotiations/{s.id}",
                     "read": False,
                 }
             )
@@ -399,19 +446,24 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
                     {
                         "id": nid,
                         "userId": p_obj.seller_id,
-                        "text": f"Incoming negotiation #{s_dict['id']} on {p_obj.name}.",
-                        "href": f"/dashboard/seller/negotiations/{s_dict['id']}",
+                        "text": f"Incoming negotiation #{s.id} on {p_obj.name}.",
+                        "href": f"/dashboard/seller/negotiations/{s.id}",
                         "read": False,
                     }
                 )
                 nid += 1
-    for d_dict in out_deals[:15]:
+    for d in deals[:25]:
+        s_obj = sessions_by_id.get(d.session_id)
+        p_obj = products_by_id.get(s_obj.product_id) if s_obj else None
+        cond = d.final_conditions if isinstance(d.final_conditions, dict) else {}
+        b_id = s_obj.buyer_id if s_obj else int(cond.get("buyer_id", 4))
+        sel_id = p_obj.seller_id if p_obj else int(cond.get("seller_id", 1))
         notices.append(
             {
                 "id": nid,
-                "userId": d_dict["buyerId"],
-                "text": f"Agreement #{d_dict['id']} is finalized at {d_dict['price']} SAR.",
-                "href": f"/dashboard/buyer/deals/{d_dict['id']}",
+                "userId": b_id,
+                "text": f"Agreement #{d.id} is finalized at {float(d.final_price)} SAR.",
+                "href": f"/dashboard/buyer/deals/{d.id}",
                 "read": False,
             }
         )
@@ -419,13 +471,37 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
         notices.append(
             {
                 "id": nid,
-                "userId": d_dict["sellerId"],
-                "text": f"Sale agreement #{d_dict['id']} is ready for fulfillment.",
-                "href": f"/dashboard/seller/deals/{d_dict['id']}",
+                "userId": sel_id,
+                "text": f"Sale agreement #{d.id} is ready for fulfillment.",
+                "href": f"/dashboard/seller/deals/{d.id}",
                 "read": False,
             }
         )
         nid += 1
+
+    if viewer is not None:
+        notices = [n for n in notices if n["userId"] == viewer.id]
+
+    # Seller confidential rules are returned only to the owning seller (NFR-03).
+    out_rules = []
+    if viewer is None or viewer.role == "seller":
+        for p in products:
+            if viewer is not None and p.seller_id != viewer.id:
+                continue
+            out_rules.append(
+                {
+                    "productId": p.id,
+                    "minimum": float(rules_by_pid[p.id].min_price) if p.id in rules_by_pid else float(p.min_acceptable_price),
+                    "discount": float(rules_by_pid[p.id].max_discount) if p.id in rules_by_pid else 20.0,
+                    "rounds": int(rules_by_pid[p.id].max_rounds) if p.id in rules_by_pid else 4,
+                    "threshold": (
+                        float(rules_by_pid[p.id].auto_accept_threshold)
+                        if p.id in rules_by_pid and rules_by_pid[p.id].auto_accept_threshold is not None
+                        else round(float(p.base_price) * 0.95, 2)
+                    ),
+                    "enabled": p.id not in disabled_pids,
+                }
+            )
 
     return {
         "products": [
@@ -452,21 +528,7 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
             }
             for u in users
         ],
-        "rules": [
-            {
-                "productId": p.id,
-                "minimum": float(rules_by_pid[p.id].min_price) if p.id in rules_by_pid else float(p.min_acceptable_price),
-                "discount": float(rules_by_pid[p.id].max_discount) if p.id in rules_by_pid else 20.0,
-                "rounds": int(rules_by_pid[p.id].max_rounds) if p.id in rules_by_pid else 4,
-                "threshold": (
-                    float(rules_by_pid[p.id].auto_accept_threshold)
-                    if p.id in rules_by_pid and rules_by_pid[p.id].auto_accept_threshold is not None
-                    else round(float(p.base_price) * 0.95, 2)
-                ),
-                "enabled": p.id not in disabled_pids,
-            }
-            for p in products
-        ],
+        "rules": out_rules,
         "sessions": out_sessions,
         "requests": out_requests,
         "deals": out_deals,
@@ -484,8 +546,13 @@ async def build_workspace_state(session: AsyncSession) -> dict[str, Any]:
 
 
 @router.get("/bootstrap")
-async def get_workspace_bootstrap(session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
-    return await build_workspace_state(session)
+async def get_workspace_bootstrap(
+    viewer_id: int | None = Query(None),
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    vid = _resolve_viewer_id(viewer_id, x_viewer_id)
+    return await build_workspace_state(session, viewer_id=vid)
 
 
 @router.post("/users/register")
@@ -512,13 +579,19 @@ async def register_user(payload: RegisterPayload, session: AsyncSession = Depend
     await session.flush()
     session.add(AuditLog(user_id=user.id, action="user_registered", details={"role": role, "email": email}))
     await session.commit()
-    return {"user_id": user.id, "state": await build_workspace_state(session)}
+    return {"user_id": user.id, "state": await build_workspace_state(session, viewer_id=user.id)}
 
 
 @router.put("/users/{user_id}")
 async def update_user_profile(
-    user_id: int, payload: ProfilePayload, session: AsyncSession = Depends(get_session)
+    user_id: int,
+    payload: ProfilePayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
+    vid = _resolve_viewer_id(None, x_viewer_id)
+    if vid is not None and vid != user_id:
+        raise HTTPException(status_code=403, detail="You can only update your own profile.")
     user = await session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -535,13 +608,21 @@ async def update_user_profile(
 
     session.add(AuditLog(user_id=user.id, action="profile_updated", details={"email": email}))
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=user.id)
 
 
 @router.patch("/users/{user_id}/status")
 async def update_user_status(
-    user_id: int, payload: UserStatusPayload, session: AsyncSession = Depends(get_session)
+    user_id: int,
+    payload: UserStatusPayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
+    vid = _resolve_viewer_id(None, x_viewer_id)
+    if vid is not None:
+        caller = await session.get(User, vid)
+        if not caller or caller.role != "admin" or not caller.is_active:
+            raise HTTPException(status_code=403, detail="Administrator authorization is required.")
     user = await session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -555,11 +636,22 @@ async def update_user_status(
         )
     )
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=vid)
 
 
 @router.post("/products")
-async def create_product(payload: ProductPayload, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+async def create_product(
+    payload: ProductPayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
+    vid = _resolve_viewer_id(None, x_viewer_id)
+    if vid is not None and vid != payload.seller_id:
+        raise HTTPException(status_code=403, detail="Seller identity mismatch.")
+    seller = await session.get(User, payload.seller_id)
+    if not seller or seller.role != "seller" or not seller.is_active:
+        raise HTTPException(status_code=403, detail="An active seller account is required.")
+
     base_price = _q2(payload.base_price)
     min_price = (base_price * Decimal("0.80")).quantize(CENT, rounding=ROUND_HALF_UP)
 
@@ -594,16 +686,22 @@ async def create_product(payload: ProductPayload, session: AsyncSession = Depend
         )
     )
     await session.commit()
-    return {"product_id": product.id, "state": await build_workspace_state(session)}
+    return {"product_id": product.id, "state": await build_workspace_state(session, viewer_id=payload.seller_id)}
 
 
 @router.put("/products/{product_id}")
 async def update_product(
-    product_id: int, payload: ProductPayload, session: AsyncSession = Depends(get_session)
+    product_id: int,
+    payload: ProductPayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     product = await session.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    vid = _resolve_viewer_id(None, x_viewer_id)
+    if product.seller_id != payload.seller_id or (vid is not None and vid != product.seller_id):
+        raise HTTPException(status_code=403, detail="You can only edit your own product listings.")
 
     base_price = _q2(payload.base_price)
     product.name = payload.name.strip()[:150]
@@ -623,16 +721,22 @@ async def update_product(
         )
     )
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=payload.seller_id)
 
 
 @router.put("/products/{product_id}/rules")
 async def update_product_rules(
-    product_id: int, payload: RulesPayload, session: AsyncSession = Depends(get_session)
+    product_id: int,
+    payload: RulesPayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     product = await session.get(Product, product_id)
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
+    vid = _resolve_viewer_id(None, x_viewer_id)
+    if product.seller_id != payload.seller_id or (vid is not None and vid != product.seller_id):
+        raise HTTPException(status_code=403, detail="You can only configure rules for your own products.")
 
     min_price = _q2(payload.minimum)
     threshold = _q2(payload.threshold)
@@ -667,13 +771,21 @@ async def update_product_rules(
         )
     )
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=payload.seller_id)
 
 
 @router.post("/sessions")
 async def create_negotiation_session(
-    payload: CreateSessionPayload, session: AsyncSession = Depends(get_session)
+    payload: CreateSessionPayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
+    vid = _resolve_viewer_id(None, x_viewer_id)
+    if vid is not None and vid != payload.buyer_id:
+        raise HTTPException(status_code=403, detail="Buyer identity mismatch.")
+    buyer = await session.get(User, payload.buyer_id)
+    if not buyer or buyer.role != "buyer" or not buyer.is_active:
+        raise HTTPException(status_code=403, detail="An active buyer account is required.")
     product = await session.get(Product, payload.product_id)
     if not product or product.stock_quantity < 1:
         raise HTTPException(status_code=400, detail="Product is unavailable or out of stock.")
@@ -703,7 +815,7 @@ async def create_negotiation_session(
         )
     )
     await session.commit()
-    return {"session_id": neg_session.id, "state": await build_workspace_state(session)}
+    return {"session_id": neg_session.id, "state": await build_workspace_state(session, viewer_id=payload.buyer_id)}
 
 
 async def _finalize_deal_in_db(
@@ -769,20 +881,37 @@ def _buyer_offer_cents(limits: dict[str, Any], round_num: int) -> int:
     return math.floor(opening + (limits["buyerTarget"] - opening) * progress)
 
 
-def _buyer_accepts(limits: dict[str, Any], counter_cents: int, previous_round: int, multi_seller: bool) -> bool:
+def _buyer_accepts(
+    limits: dict[str, Any],
+    counter_cents: int,
+    previous_round: int,
+    multi_seller: bool,
+    competing_cents: int | None = None,
+) -> bool:
     if counter_cents > limits["buyerTarget"]:
         return False
     if not multi_seller or previous_round + 1 > limits["rounds"]:
         return True
-    # AC_next: with other sellers to compare, accept only a counteroffer that is
-    # no higher than the buyer agent's own next offer.
-    return counter_cents <= _buyer_offer_cents(limits, previous_round + 1)
+    # AC_next + Competitive Leverage: accept only if no higher than the buyer agent's own
+    # next offer AND no higher than the best competing offer minus a competitive margin.
+    next_offer = _buyer_offer_cents(limits, previous_round + 1)
+    if competing_cents is not None:
+        undercut = max(2500, math.floor(competing_cents * 0.02))
+        next_offer = min(next_offer, max(1, competing_cents - undercut))
+    return counter_cents <= next_offer
 
 
-async def _run_agent_turn(session: AsyncSession, neg_session: NegotiationSession) -> str:
+async def _run_agent_turn(
+    session: AsyncSession,
+    neg_session: NegotiationSession,
+    competing_cents: int | None = None,
+) -> str:
     """Play the next agent turn of one session without committing.
 
     Returns "turn", "agreed", "failed" or "noop".
+    When competing_cents is provided (in a multi-seller request), the buyer agent uses
+    the best competing offer as leverage and the seller agent accelerates concessions
+    to beat the competing offer within its confidential floor.
     """
     if neg_session.status != "active":
         return "noop"
@@ -860,13 +989,14 @@ async def _run_agent_turn(session: AsyncSession, neg_session: NegotiationSession
     agreed = False
     last_cond = (last_offer.conditions or {}) if last_offer else {}
     last_action = last_cond.get("action", "counteroffer" if last_offer and last_offer.offered_by == "seller" else "offer")
+    offer_conditions: dict[str, Any] = {}
 
     if (
         agent == "buyer"
         and last_offer
         and last_offer.offered_by == "seller"
         and last_action == "counteroffer"
-        and _buyer_accepts(limits, _cents(last_offer.price), previous_round, neg_session.request_id is not None)
+        and _buyer_accepts(limits, _cents(last_offer.price), previous_round, neg_session.request_id is not None, competing_cents)
     ):
         round_num = last_offer.round_number
         action = "accept"
@@ -878,15 +1008,29 @@ async def _run_agent_turn(session: AsyncSession, neg_session: NegotiationSession
         if round_num > limits["rounds"]:
             return fail_session("The maximum negotiation rounds were exhausted without agreement.")
         opening = min(limits["buyerTarget"], max(1, math.floor(limits["asking"] * 0.55)))
-        progress = 0.0 if limits["rounds"] == 1 else (round_num - 1) / (limits["rounds"] - 1)
-        price_cents = math.floor(opening + (limits["buyerTarget"] - opening) * progress)
-        price_dec = _q2(price_cents / 100.0)
-        action = "offer"
-        message = (
-            "I am opening with a lower proposal for these terms."
-            if round_num == 1
-            else "I can increase my previous proposal to move the discussion forward."
-        )
+        scheduled_cents = _buyer_offer_cents(limits, round_num)
+        prev_buyer_cents = max((_cents(o.price) for o in offers if o.offered_by == "buyer"), default=0)
+        if competing_cents is not None and competing_cents < (_cents(last_offer.price) if last_offer else limits["asking"]):
+            undercut = max(2500, math.floor(competing_cents * 0.02))
+            leveraged_cents = max(opening, prev_buyer_cents, min(scheduled_cents, competing_cents - undercut))
+            price_cents = min(limits["buyerTarget"], leveraged_cents)
+            price_dec = _q2(price_cents / 100.0)
+            action = "offer"
+            comp_sar = competing_cents / 100.0
+            message = (
+                f"Another seller in this request is offering {comp_sar:.2f} SAR. "
+                f"I am proposing {float(price_dec):.2f} SAR — lower your price to stay competitive."
+            )
+            offer_conditions["competing_offer"] = round(comp_sar, 2)
+        else:
+            price_cents = max(prev_buyer_cents, scheduled_cents)
+            price_dec = _q2(price_cents / 100.0)
+            action = "offer"
+            message = (
+                "I am opening with a lower proposal for these terms."
+                if round_num == 1
+                else "I can increase my previous proposal to move the discussion forward."
+            )
     else:
         round_num = last_offer.round_number if last_offer else 1
         progress = 0.0 if limits["rounds"] == 1 else (round_num - 1) / (limits["rounds"] - 1)
@@ -895,7 +1039,19 @@ async def _run_agent_turn(session: AsyncSession, neg_session: NegotiationSession
             if scenario == "failed"
             else limits["floor"]
         )
-        price_cents = math.ceil(limits["asking"] + (target - limits["asking"]) * progress)
+        scheduled_cents = math.ceil(limits["asking"] + (target - limits["asking"]) * progress)
+        prev_seller_cents = min((_cents(o.price) for o in offers if o.offered_by == "seller"), default=limits["asking"])
+        scheduled_cents = min(scheduled_cents, prev_seller_cents)
+        price_cents = scheduled_cents
+        leverage_used = False
+
+        if competing_cents is not None and scenario != "failed" and competing_cents < scheduled_cents:
+            undercut = max(2500, math.floor(competing_cents * 0.02))
+            competitive_target = max(limits["floor"], competing_cents - undercut)
+            if competitive_target < scheduled_cents:
+                price_cents = competitive_target
+                leverage_used = True
+
         offer_cents = _cents(last_offer.price) if last_offer else 0
         agreed = offer_cents >= price_cents or (scenario != "failed" and offer_cents >= limits["threshold"])
         if agreed and last_offer:
@@ -905,11 +1061,22 @@ async def _run_agent_turn(session: AsyncSession, neg_session: NegotiationSession
         else:
             action = "counteroffer"
             price_dec = _q2(price_cents / 100.0)
-            message = (
-                "My opening counteroffer reflects the public listing price."
-                if round_num == 1
-                else "I can reduce my previous counteroffer for these terms."
-            )
+            if leverage_used and competing_cents is not None:
+                comp_sar = competing_cents / 100.0
+                sched_sar = scheduled_cents / 100.0
+                message = (
+                    f"To compete with the {comp_sar:.2f} SAR offer from another seller, "
+                    f"I lowered my counteroffer from {sched_sar:.2f} SAR to {float(price_dec):.2f} SAR."
+                )
+                offer_conditions["leverage_applied"] = True
+                offer_conditions["competing_offer"] = round(comp_sar, 2)
+                offer_conditions["scheduled_price"] = round(sched_sar, 2)
+            else:
+                message = (
+                    "My opening counteroffer reflects the public listing price."
+                    if round_num == 1
+                    else "I can reduce my previous counteroffer for these terms."
+                )
 
     if agreed and (_cents(price_dec) > budget or _cents(price_dec) < max(limits["floor"], floor)):
         return fail_session("The terms changed and this proposal is no longer available.")
@@ -920,7 +1087,7 @@ async def _run_agent_turn(session: AsyncSession, neg_session: NegotiationSession
         session_id=session_id,
         offered_by=agent,
         price=price_dec,
-        conditions={"action": action, "message": message},
+        conditions={"action": action, "message": message, **offer_conditions},
         status="accepted" if agreed else "countered" if agent == "seller" else "pending",
         round_number=round_num,
     )
@@ -955,11 +1122,16 @@ def _reject_request_session(neg_session: NegotiationSession) -> None:
 
 @router.post("/sessions/{session_id}/advance")
 async def advance_negotiation_session(
-    session_id: int, session: AsyncSession = Depends(get_session)
+    session_id: int,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     neg_session = await session.get(NegotiationSession, session_id)
+    vid = _resolve_viewer_id(None, x_viewer_id)
     if not neg_session or neg_session.status != "active":
-        return await build_workspace_state(session)
+        return await build_workspace_state(session, viewer_id=vid or (neg_session.buyer_id if neg_session else None))
+    if vid is not None and vid != neg_session.buyer_id:
+        raise HTTPException(status_code=403, detail="Only the owning buyer can advance this session.")
     _reject_request_session(neg_session)
 
     outcome = await _run_agent_turn(session, neg_session)
@@ -972,23 +1144,28 @@ async def advance_negotiation_session(
         await _finalize_deal_in_db(session, neg_session, product, offers[-1].price, meta, closed_by="system")
 
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=neg_session.buyer_id)
 
 
 @router.post("/sessions/{session_id}/approve")
 async def approve_negotiation_session(
-    session_id: int, session: AsyncSession = Depends(get_session)
+    session_id: int,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     neg_session = await session.get(NegotiationSession, session_id)
+    vid = _resolve_viewer_id(None, x_viewer_id)
     if not neg_session or neg_session.status != "active":
-        return await build_workspace_state(session)
+        return await build_workspace_state(session, viewer_id=vid or (neg_session.buyer_id if neg_session else None))
+    if vid is not None and vid != neg_session.buyer_id:
+        raise HTTPException(status_code=403, detail="Only the owning buyer can approve this session.")
     _reject_request_session(neg_session)
 
     offers = (
         await session.scalars(select(Offer).where(Offer.session_id == session_id).order_by(Offer.id.asc()))
     ).all()
     if not offers or offers[-1].status != "accepted":
-        return await build_workspace_state(session)
+        return await build_workspace_state(session, viewer_id=neg_session.buyer_id)
 
     product = await session.get(Product, neg_session.product_id)
     if not product:
@@ -1004,16 +1181,22 @@ async def approve_negotiation_session(
 
     await _finalize_deal_in_db(session, neg_session, product, offers[-1].price, meta, closed_by="buyer")
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=neg_session.buyer_id)
 
 
 @router.post("/sessions/{session_id}/end")
 async def end_negotiation_session(
-    session_id: int, payload: EndSessionPayload, session: AsyncSession = Depends(get_session)
+    session_id: int,
+    payload: EndSessionPayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     neg_session = await session.get(NegotiationSession, session_id)
+    vid = _resolve_viewer_id(None, x_viewer_id)
     if not neg_session or neg_session.buyer_id != payload.buyer_id:
-        return await build_workspace_state(session)
+        return await build_workspace_state(session, viewer_id=vid or payload.buyer_id)
+    if vid is not None and vid != neg_session.buyer_id:
+        raise HTTPException(status_code=403, detail="Only the owning buyer can end this session.")
     _reject_request_session(neg_session)
 
     neg_session.status = "cancelled"
@@ -1029,18 +1212,24 @@ async def end_negotiation_session(
         )
     )
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=payload.buyer_id)
 
 
 @router.post("/deals/{deal_id}/rating")
 async def save_deal_rating(
-    deal_id: int, payload: RatingPayload, session: AsyncSession = Depends(get_session)
+    deal_id: int,
+    payload: RatingPayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     deal = await session.get(Deal, deal_id)
     if not deal:
         raise HTTPException(status_code=404, detail="Deal not found")
 
     neg_session = await session.get(NegotiationSession, deal.session_id)
+    vid = _resolve_viewer_id(None, x_viewer_id)
+    if (neg_session and neg_session.buyer_id != payload.buyer_id) or (vid is not None and vid != payload.buyer_id):
+        raise HTTPException(status_code=403, detail="Only the buyer of this agreement can submit a rating.")
     product = await session.get(Product, neg_session.product_id) if neg_session else None
     seller_id = product.seller_id if product else 1
 
@@ -1073,13 +1262,14 @@ async def save_deal_rating(
         )
     )
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=payload.buyer_id)
 
 # ==========================================
 # One buyer, many sellers (buyer requests)
 # ==========================================
 # The buyer picks 2-5 listings. Each listing gets its own one-to-one session with
-# that seller's agent, and the buyer agent compares the results with a utility score.
+# that seller's agent, and the buyer agent compares the results with a utility score
+# while using the best current offer across sellers as competitive leverage.
 
 MIN_REQUEST_LISTINGS = 2
 MAX_REQUEST_LISTINGS = 5
@@ -1096,13 +1286,7 @@ class CreateRequestPayload(BaseModel):
 
 
 def _offer_utility(price: Decimal, budget: Decimal, rank: int, listings: int, price_weight: float) -> Decimal:
-    """Buyer-side value of an offer, 0 (worst) to 1 (best).
-
-    Listings are different products, so prices alone cannot be compared. The score mixes:
-    - price: savings against the buyer's budget, full marks at half the budget or less;
-    - preference: the buyer's own ranking of the selected listings.
-    An offer above the budget is not acceptable at all, so it scores 0.
-    """
+    """Buyer-side value of an offer, 0 (worst) to 1 (best)."""
     if price > budget:
         return Decimal("0")
     price_score = min(1.0, max(0.0, float(budget - price) / (float(budget) * 0.5))) if budget > 0 else 0.0
@@ -1126,6 +1310,15 @@ async def _request_sessions(session: AsyncSession, request_id: int) -> list[Nego
 async def _last_offer(session: AsyncSession, session_id: int) -> Offer | None:
     return await session.scalar(
         select(Offer).where(Offer.session_id == session_id).order_by(Offer.id.desc()).limit(1)
+    )
+
+
+async def _last_seller_offer(session: AsyncSession, session_id: int) -> Offer | None:
+    return await session.scalar(
+        select(Offer)
+        .where(Offer.session_id == session_id, Offer.offered_by == "seller")
+        .order_by(Offer.id.desc())
+        .limit(1)
     )
 
 
@@ -1161,8 +1354,13 @@ async def _finish_request(session: AsyncSession, req: BuyerRequest, chosen: Nego
 
 @router.post("/requests")
 async def create_buyer_request(
-    payload: CreateRequestPayload, session: AsyncSession = Depends(get_session)
+    payload: CreateRequestPayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
+    vid = _resolve_viewer_id(None, x_viewer_id)
+    if vid is not None and vid != payload.buyer_id:
+        raise HTTPException(status_code=403, detail="Buyer identity mismatch.")
     buyer = await session.get(User, payload.buyer_id)
     if not buyer or buyer.role != "buyer" or not buyer.is_active:
         raise HTTPException(status_code=400, detail="An active buyer account is required.")
@@ -1203,7 +1401,6 @@ async def create_buyer_request(
     await session.flush()
 
     for product in products:
-        # The buyer agent never offers more than the listing's public price.
         neg_session = NegotiationSession(
             buyer_id=buyer.id,
             product_id=product.id,
@@ -1237,7 +1434,7 @@ async def create_buyer_request(
         )
     )
     await session.commit()
-    return {"request_id": req.id, "state": await build_workspace_state(session)}
+    return {"request_id": req.id, "state": await build_workspace_state(session, viewer_id=buyer.id)}
 
 
 def _request_utility(req: BuyerRequest):
@@ -1264,21 +1461,38 @@ async def _agreed_offers(session: AsyncSession, sessions: list[NegotiationSessio
 
 
 @router.post("/requests/{request_id}/advance")
-async def advance_buyer_request(request_id: int, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+async def advance_buyer_request(
+    request_id: int,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
+) -> dict[str, Any]:
     """Play one round (buyer offer + seller response) in every session still bargaining.
 
-    Sessions run until their last round, so every seller can still improve its offer.
-    When none is bargaining any more, the buyer chooses among the agreed offers
-    (semi-automated), or the agent closes the highest score (automated).
+    Before advancing each round, the lowest seller offer from the previous round is
+    captured as anonymous competitive leverage so processing order cannot bias sellers.
     """
     req = await session.scalar(select(BuyerRequest).where(BuyerRequest.id == request_id).with_for_update())
+    vid = _resolve_viewer_id(None, x_viewer_id)
     if not req or req.status != "active":
-        return await build_workspace_state(session)
+        return await build_workspace_state(session, viewer_id=vid or (req.buyer_id if req else None))
+    if vid is not None and vid != req.buyer_id:
+        raise HTTPException(status_code=403, detail="Only the owning buyer can advance this request.")
 
     sessions = await _request_sessions(session, req.id)
+
+    # Snapshot previous-round seller quotes across all participating sessions for fair leverage.
+    prev_seller_cents: dict[int, int] = {}
     for s in sessions:
+        if s.status != "active":
+            continue
+        s_offer = await _last_seller_offer(session, s.id)
+        if s_offer is not None:
+            prev_seller_cents[s.id] = _cents(s_offer.price)
+
+    for s in sessions:
+        competing = min((p for sid, p in prev_seller_cents.items() if sid != s.id), default=None)
         for _ in range(2):
-            if await _run_agent_turn(session, s) != "turn":
+            if await _run_agent_turn(session, s, competing_cents=competing) != "turn":
                 break
 
     utility = _request_utility(req)
@@ -1290,7 +1504,6 @@ async def advance_buyer_request(request_id: int, session: AsyncSession = Depends
         if last is None:
             bargaining = True
             continue
-        # Score the latest price on the table in each session, so the buyer can compare sellers.
         last.utility_score = utility(s, last.price)
         if last.status != "accepted":
             bargaining = True
@@ -1316,20 +1529,26 @@ async def advance_buyer_request(request_id: int, session: AsyncSession = Depends
             req.status = "awaiting_approval"
 
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=req.buyer_id)
 
 
 class ApproveRequestPayload(BaseModel):
-    session_id: int | None = None  # the offer the buyer chose; defaults to the highest score
+    session_id: int | None = None
 
 
 @router.post("/requests/{request_id}/approve")
 async def approve_buyer_request(
-    request_id: int, payload: ApproveRequestPayload | None = None, session: AsyncSession = Depends(get_session)
+    request_id: int,
+    payload: ApproveRequestPayload | None = None,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     req = await session.scalar(select(BuyerRequest).where(BuyerRequest.id == request_id).with_for_update())
+    vid = _resolve_viewer_id(None, x_viewer_id)
     if not req or req.status != "awaiting_approval":
-        return await build_workspace_state(session)
+        return await build_workspace_state(session, viewer_id=vid or (req.buyer_id if req else None))
+    if vid is not None and vid != req.buyer_id:
+        raise HTTPException(status_code=403, detail="Only the owning buyer can approve this request.")
 
     sessions = await _request_sessions(session, req.id)
     agreed = await _agreed_offers(session, sessions)
@@ -1337,7 +1556,7 @@ async def approve_buyer_request(
         req.status = "failed"
         req.ended_at = datetime.now(timezone.utc)
         await session.commit()
-        return await build_workspace_state(session)
+        return await build_workspace_state(session, viewer_id=req.buyer_id)
 
     chosen_id = payload.session_id if payload else None
     if chosen_id is None:
@@ -1358,16 +1577,22 @@ async def approve_buyer_request(
     )
     await _finish_request(session, req, chosen, closed_by="buyer")
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=req.buyer_id)
 
 
 @router.post("/requests/{request_id}/end")
 async def end_buyer_request(
-    request_id: int, payload: EndSessionPayload, session: AsyncSession = Depends(get_session)
+    request_id: int,
+    payload: EndSessionPayload,
+    x_viewer_id: str | None = Header(None),
+    session: AsyncSession = Depends(get_session),
 ) -> dict[str, Any]:
     req = await session.scalar(select(BuyerRequest).where(BuyerRequest.id == request_id).with_for_update())
+    vid = _resolve_viewer_id(None, x_viewer_id)
     if not req or req.buyer_id != payload.buyer_id or req.status not in ("active", "awaiting_approval"):
-        return await build_workspace_state(session)
+        return await build_workspace_state(session, viewer_id=vid or payload.buyer_id)
+    if vid is not None and vid != req.buyer_id:
+        raise HTTPException(status_code=403, detail="Only the owning buyer can end this request.")
 
     ui_status = "rejected" if payload.status == "rejected" and req.status == "awaiting_approval" else "cancelled"
     await _close_request_sessions(session, await _request_sessions(session, req.id), None, ui_status)
@@ -1375,4 +1600,4 @@ async def end_buyer_request(
     req.ended_at = datetime.now(timezone.utc)
     session.add(AuditLog(user_id=req.buyer_id, action=f"request_{ui_status}", details={"request_id": req.id}))
     await session.commit()
-    return await build_workspace_state(session)
+    return await build_workspace_state(session, viewer_id=req.buyer_id)

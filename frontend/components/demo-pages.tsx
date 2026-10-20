@@ -212,9 +212,9 @@ export function DemoScreen({ role, segments = [] }: {
     const base = `/dashboard/${role}`;
     if (section === "negotiations" && segments[1])
         return <SessionDetail id={id}/>;
-    if (role === "buyer" && section === "requests" && segments[1])
+    if ((role === "buyer" || role === "admin") && section === "requests" && segments[1])
         return <RequestDetail id={id}/>;
-    if (role === "buyer" && section === "requests")
+    if ((role === "buyer" || role === "admin") && section === "requests")
         return <>
         <Heading title="Multi-seller Requests" description="Each request negotiates with several sellers at once and keeps the best offer." action={<Link className="btn" href="/products">Compare listings →</Link>}/>
         {state.requests.length ? <div className="panel table-wrap">

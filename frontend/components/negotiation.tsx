@@ -116,6 +116,8 @@ export function SessionDetail({ id }: {
                 <span className="text-xs muted">Round {turn.number} · {turn.action}</span>
               </div>
               <p className="text-xl font-bold mt-2">{money(turn.price)}</p>
+              {turn.leverageApplied && turn.competingOffer !== undefined && <p className="text-xs font-semibold text-emerald-800 mt-1">↓ Competitive leverage applied (vs {money(turn.competingOffer)} competing offer)</p>}
+              {!turn.leverageApplied && turn.competingOffer !== undefined && <p className="text-xs font-semibold text-indigo-700 mt-1">↗ Competitive leverage: referencing {money(turn.competingOffer)} competing offer</p>}
               <p className="text-sm mt-2">{turn.message}</p>
             </article>)}
             {!session.rounds.length && <p className="muted">The Buyer Agent will open with a lower offer.</p>}
@@ -155,7 +157,7 @@ export function SessionDetail({ id }: {
               <dd className="text-2xl font-bold">{money(session.agreedPrice)}</dd>
             </div>}</dl>
             <p className="muted text-sm mt-4">Warranty: {session.warranty} months<br />Delivery: {session.delivery}</p>{buyer && session.budget !== undefined && <p className="text-sm mt-4">Your private budget: <strong>{money(session.budget)}</strong>
-            </p>}<p className="muted text-xs mt-4">Role-specific view data excludes the other party's confidential limits.</p>
+            </p>}<p className="muted text-xs mt-4">Server-enforced role isolation excludes the other party's confidential limits.</p>
           </div>
           {buyer && !managed && session.status === "awaiting_approval" && <div className="panel">
             <h2>Review final agreement</h2>
@@ -220,11 +222,11 @@ export function RequestSetup({ productIds }: {
     }
     const highest = Math.max(...listings.map(p => Number(p.base_price)));
     return <>
-    <Heading eyebrow="One buyer · many sellers" title="Negotiate with several sellers at once" description="Your agent opens a separate negotiation with each seller, compares their offers, and keeps only the best one."/>
+    <Heading eyebrow="One buyer · many sellers" title="Negotiate with several sellers at once" description="Your agent opens a separate negotiation with each seller, uses the lowest competing offer as leverage across rounds, and scores offers using your ranking and budget."/>
     <form className="panel max-w-3xl space-y-6" onSubmit={submit}>
     <div>
     <h2>1. Rank the listings</h2>
-    <p className="muted text-sm mt-1">These are different products, so price alone cannot compare them. Put the one you prefer first.</p>
+    <p className="muted text-sm mt-1">Put the listing you prefer first. Your agent combines price savings with this preference ranking.</p>
     <ol className="mt-4 space-y-2">{listings.map((p, index) => <li key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
         <span className="text-sm"><strong>#{index + 1}</strong> {p.name} · {money(p.base_price)} · {state.users.find(u => u.id === p.seller_id)?.name ?? "Seller"}</span>
         <span className="flex gap-1">
@@ -273,7 +275,7 @@ export function RequestDetail({ id }: {
         return <BackendPending />;
     const request = state.requests.find(r => r.id === id);
     if (!request)
-        return <Empty title="Request unavailable" description="Choose the owning buyer identity or return to your requests." href="/dashboard/buyer/requests" label="My requests"/>;
+        return <Empty title="Request unavailable" description="Choose the owning buyer identity or return to your requests." href={`/dashboard/${user.role}/requests`} label="Requests"/>;
     const buyer = user.role === "buyer" && request.buyerId === user.id;
     const run = async (action: () => Promise<void>, text?: string) => {
         setBusy(true);
@@ -290,12 +292,18 @@ export function RequestDetail({ id }: {
     const selectedName = selected && state.products.find(p => p.id === selected.productId)?.name;
     const round = Math.max(0, ...rows.map(s => negotiationRoundCount(s)));
     const deal = chosen && state.deals.find(d => d.sessionId === chosen.id);
+    const sellerQuotes = rows.map(s => s.rounds.filter(t => t.agent === "seller").at(-1)?.price).filter((p): p is number => p !== undefined);
+    const bestQuote = sellerQuotes.length ? Math.min(...sellerQuotes) : undefined;
+    const leverageTurns = rows.reduce((n, s) => n + s.rounds.filter(t => t.leverageApplied).length, 0);
     return <>
     <Heading eyebrow="One buyer · many sellers" title={`Request #${request.id}`} description={`${rows.length} sellers · ${request.mode.replaceAll("_", " ")} · round ${round}`} action={<Badge>{request.status.replaceAll("_", " ")}</Badge>}/>
     <div className="grid lg:grid-cols-[1fr_320px] gap-6">
     <section className="panel">
     <h2>Seller offers</h2>
     <p className="muted text-sm mt-2">Each row is a separate negotiation with one seller. Score compares the latest price on the table: {Math.round(request.priceWeight * 100)}% savings against your budget and {Math.round((1 - request.priceWeight) * 100)}% your ranking. An offer above your budget scores 0.</p>
+    {bestQuote !== undefined && <div className="mt-4 rounded-xl border border-indigo-200 bg-indigo-50 p-3 text-sm text-indigo-900">
+        <strong>Competitive leverage active:</strong> Best current seller quote on the table is <strong>{money(bestQuote)}</strong>{leverageTurns > 0 ? ` · ${leverageTurns} seller counteroffer${leverageTurns === 1 ? "" : "s"} lowered directly by competing offer pressure.` : " · Used in subsequent rounds to pressure higher-priced sellers."}
+    </div>}
     <div className="table-wrap mt-4">
     <table>
     <thead>
@@ -314,12 +322,13 @@ export function RequestDetail({ id }: {
         const last = s.rounds.at(-1);
         const buyerTurn = s.rounds.filter(t => t.agent === "buyer").at(-1);
         const sellerTurn = s.rounds.filter(t => t.agent === "seller").at(-1);
+        const leveraged = s.rounds.some(t => t.leverageApplied);
         return <tr key={s.id} className={s.id === chosen?.id || (request.status === "awaiting_approval" && s.id === selected?.id) ? "bg-emerald-50" : ""}>
         <td>#{request.productIds.indexOf(s.productId) + 1}</td>
-        <td><Link className="text-indigo-600" href={`/dashboard/buyer/negotiations/${s.id}`}>{p?.name ?? "Listing"}</Link><br /><span className="muted text-xs">Listed {p ? money(p.base_price) : "-"}</span></td>
+        <td><Link className="text-indigo-600" href={`/dashboard/${user.role}/negotiations/${s.id}`}>{p?.name ?? "Listing"}</Link><br /><span className="muted text-xs">Listed {p ? money(p.base_price) : "-"}</span></td>
         <td>{state.users.find(u => u.id === p?.seller_id)?.name ?? "Seller"}</td>
         <td>{buyerTurn ? money(buyerTurn.price) : "-"}</td>
-        <td>{sellerTurn ? `${money(sellerTurn.price)}${sellerTurn.action === "accept" ? " ✓" : ""}` : "-"}</td>
+        <td>{sellerTurn ? <><span>{money(sellerTurn.price)}{sellerTurn.action === "accept" ? " ✓" : ""}</span>{leveraged && <span className="block text-xs text-emerald-700 font-semibold">↓ Leverage applied</span>}</> : "-"}</td>
         <td>{last?.utility !== undefined ? last.utility.toFixed(2) : "-"}</td>
         <td><Badge>{s.status === "awaiting_approval" ? (s.id === recommended?.id ? "agreed · recommended" : "agreed") : s.status.replaceAll("_", " ")}</Badge></td>
         </tr>;
@@ -334,7 +343,8 @@ export function RequestDetail({ id }: {
     <h2>How your agent decides</h2>
     <ul className="list-disc ml-5 mt-3 space-y-2 muted">
     <li>Each round, your agent sends an offer to every seller and each seller agent replies.</li>
-    <li>Your agent accepts a seller offer only if it is no higher than its own next offer.</li>
+    <li>From round 2 onwards, your agent uses the lowest competing offer as anonymous leverage so other sellers lower their counteroffers faster.</li>
+    <li>Your agent accepts a seller offer only if it is no higher than its own next offer (AC_next).</li>
     <li>Bargaining continues with every seller until the last round, so each one can still lower its price.</li>
     <li>{request.mode === "automated" ? "At the end, your agent closes the agreed offer with the highest score." : "At the end, you choose any agreed offer. The highest score is marked as recommended."}</li>
     </ul>

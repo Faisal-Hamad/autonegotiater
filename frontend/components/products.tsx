@@ -42,9 +42,9 @@ export function ProductCatalog({ products: realProducts }: {
         <p className="eyebrow">Recommended · one buyer, many sellers</p>
         <h2>Let your agent negotiate with several sellers at once</h2>
         <ol className="list-decimal ml-5 mt-3 space-y-1 text-sm">
-        <li>Press <strong>Add to multi-seller negotiation</strong> on 2 to {MAX_SELLERS} listings that would all satisfy you.</li>
+        <li>Press <strong>Add to multi-seller negotiation</strong> on 2 to {MAX_SELLERS} listings that would all satisfy you (or open any product for 1-click category negotiation).</li>
         <li>Press <strong>Negotiate with these sellers</strong> in the bar at the bottom of the screen.</li>
-        <li>Your agent bargains with every seller in parallel and keeps the best offer.</li>
+        <li>Your agent bargains with every seller in parallel, uses the best competing quote as leverage, and scores offers using your ranking and budget.</li>
         </ol>
         <p className="muted text-sm mt-3">Want one specific item? Open it and choose <strong>Negotiate with this seller only</strong>.</p>
         </div>}
@@ -136,6 +136,9 @@ export function ProductDetails({ product: original }: {
 }) {
     const { enabled, state, user } = useDemo();
     const p = enabled ? state.products.find(p => p.id === original.id) ?? original : original;
+    const basePrice = Number(p.base_price);
+    const competitors = (enabled ? state.products : []).filter(other => other.id !== p.id && other.stock_quantity > 0 && other.category === p.category).sort((a, b) => Math.abs(Number(a.base_price) - basePrice) - Math.abs(Number(b.base_price) - basePrice)).slice(0, MAX_SELLERS - 1);
+    const quickIds = [p.id, ...competitors.map(c => c.id)];
     return <>
     <Link href="/products" className="text-indigo-600 text-sm">← Back to marketplace</Link>
     <div className="grid md:grid-cols-2 gap-8 mt-6">
@@ -144,20 +147,38 @@ export function ProductDetails({ product: original }: {
     <Badge>{p.category}</Badge>
     <h1 className="mt-5">{p.name}</h1>
     <p className="text-3xl font-bold mt-6">{money(p.base_price)}</p>
-    <p className="muted text-sm mt-1">Public listing price · SAR</p>
+    <p className="muted text-sm mt-1">Public listing price · SAR · Seller: {state.users.find(u => u.id === p.seller_id)?.name ?? `Seller #${p.seller_id}`}</p>
     <p className="mt-5 text-sm">{p.stock_quantity > 0 ? `${p.stock_quantity} units available` : "Out of stock"}</p>
     <p className="mt-5 muted whitespace-pre-wrap">{p.description || "No description provided."}</p>
     <div className="mt-8">{p.stock_quantity < 1 ? <button className="btn w-full" disabled>Out of stock</button> : enabled && user.role === "buyer" ? <div className="space-y-3">
-    <Link className="btn w-full" href={`/products?select=${p.id}`}>+ Add to multi-seller negotiation →</Link>
-    <p className="muted text-xs text-center">Recommended: pick 2 to {MAX_SELLERS} similar listings and your agent keeps the best offer.</p>
+    {quickIds.length >= 2 && <Link className="btn w-full" href={`/negotiate?products=${quickIds.join(",")}`}>Negotiate with {quickIds.length} competing sellers in {p.category} →</Link>}
+    <Link className={quickIds.length >= 2 ? "btn-secondary w-full" : "btn w-full"} href={`/products?select=${p.id}`}>+ Select custom listings in marketplace →</Link>
+    <p className="muted text-xs text-center">Recommended: negotiate with several sellers at once so your agent uses the lowest offer as leverage and keeps the best deal.</p>
     <Link className="btn-secondary w-full" href={`/products/${p.id}/negotiate`}>Negotiate with this seller only</Link>
-    </div> : <p className="panel text-sm">{enabled ? "Switch to a buyer demo identity to start a simulation." : "Negotiation setup requires an authenticated buyer and a future FastAPI endpoint."}</p>}</div>
-    <p className="muted text-xs mt-4">{enabled ? "Local simulation only. No real AI or transaction." : "No negotiation will start without a supported backend."}</p>
+    </div> : <p className="panel text-sm">{enabled ? "Switch to a buyer identity to start a negotiation." : "Negotiation setup requires an authenticated buyer and a supported FastAPI endpoint."}</p>}</div>
     </div>
     </div>
     <div className="panel mt-6">
-    <h2>Compare sellers</h2>
-    <p className="muted mt-2">Each listing has one seller. To compare sellers, add this listing and other similar ones to a multi-seller negotiation: your agent bargains with each seller at the same time and scores their offers against your budget and your ranking.</p>
+    <h2>Competing sellers in {p.category}</h2>
+    <p className="muted mt-2">When you start a multi-seller negotiation, your agent negotiates with each seller in parallel, uses the lowest competing offer as anonymous leverage, and scores offers using your budget and preference ranking.</p>
+    {competitors.length > 0 && <div className="table-wrap mt-4">
+        <table>
+        <thead>
+        <tr>
+        <th>Listing</th>
+        <th>Seller</th>
+        <th>Public price</th>
+        <th>Stock</th>
+        </tr>
+        </thead>
+        <tbody>{[p, ...competitors].map((item, idx) => <tr key={item.id}>
+            <td><Link className="text-indigo-600" href={`/products/${item.id}`}>{item.name}</Link>{idx === 0 && <span className="ml-2 text-xs text-indigo-700 font-semibold">(Current listing)</span>}</td>
+            <td>{state.users.find(u => u.id === item.seller_id)?.name ?? `Seller #${item.seller_id}`}</td>
+            <td>{money(item.base_price)}</td>
+            <td>{item.stock_quantity}</td>
+        </tr>)}</tbody>
+        </table>
+    </div>}
     </div>
     </>;
 }

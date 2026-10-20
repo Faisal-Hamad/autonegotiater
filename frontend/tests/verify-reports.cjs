@@ -60,6 +60,18 @@ for (const status of ['active','failed','cancelled','rejected','awaiting_approva
 }
 state.users[1].name='=HYPERLINK("bad")';
 assert.ok(reportCsv(buildReport(state,'seller',2,date)).includes("'=HYPERLINK"));
+
+const withReq = structuredClone(state);
+withReq.requests = [{ id: 301, buyerId: 4, budget: 3500, mode: 'semi_automated', status: 'awaiting_approval', priceWeight: 0.5, productIds: [1, 3], sessionIds: [101, 102], warranty: 1, delivery: 'Buyer pickup', createdAt: '2026-10-13T08:00:00Z' }];
+const reqReport = buildReport(model.projectDemoState(withReq, withReq.users[5]), 'request', 301, date);
+assert.ok(reqReport, 'Multi-Seller Request Report is generated for Admin');
+const reqJson = JSON.stringify(reqReport);
+assert.ok(reqJson.includes('Multi-Seller Request Report #301'));
+assert.ok(reqJson.includes('Multi-Seller Request Details'));
+assert.ok(!reqJson.includes('"budget"'), 'Request report excludes private buyer budget');
+const buyerWithReqReport = buildReport(model.projectDemoState(withReq, withReq.users[5]), 'buyer', 4, date);
+assert.ok(JSON.stringify(buyerWithReqReport).includes('#301'), 'Buyer report includes Multi-Seller Requests section');
+
 (async()=>{
   const pdf=jpegPagesPdf([new Uint8Array([255,216,255,217]),new Uint8Array([255,216,255,217])]);
   const text=await pdf.text();

@@ -72,7 +72,9 @@ export function DemoProvider({ enabled, products, initialData, children }: {
 
     useEffect(() => {
         let active = true;
-        fetch("/api/workspace/bootstrap", { cache: "no-store" })
+        const query = userId > 0 ? `?viewer_id=${userId}` : "";
+        const headers: Record<string, string> = userId > 0 ? { "X-Viewer-Id": String(userId) } : {};
+        fetch(`/api/workspace/bootstrap${query}`, { cache: "no-store", headers })
             .then(res => res.ok ? res.json() : null)
             .then(data => {
                 if (active && data && Array.isArray(data.users) && data.users.length > 0) {
@@ -83,7 +85,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
                 // Keep initial state when running offline
             });
         return () => { active = false; };
-    }, []);
+    }, [userId]);
 
     const user = engineState.users.find(u => u.id === userId) ?? engineState.users.find(u => u.role === "buyer") ?? engineState.users[0];
     const state = projectDemoState(engineState, user);
@@ -97,6 +99,13 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         }
     };
 
+    function viewerHeaders(extra?: Record<string, string>): Record<string, string> {
+        return {
+            ...(user?.id ? { "X-Viewer-Id": String(user.id) } : {}),
+            ...extra,
+        };
+    }
+
     async function createNegotiation(input: NegotiationInput): Promise<number | null> {
         const p = engineState.products.find(p => p.id === input.productId);
         if (!enabled || user.role !== "buyer" || !p || p.stock_quantity < 1 || !Number.isFinite(input.budget) || input.budget < .01 || !Number.isSafeInteger(Math.floor(input.budget * 100)) || (input.mode === "automated" && input.scenario === "rejection")) {
@@ -106,7 +115,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         try {
             const res = await fetch("/api/workspace/sessions", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: viewerHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({
                     buyer_id: user.id,
                     product_id: input.productId,
@@ -135,7 +144,10 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         if (!enabled || user.role !== "buyer") return;
         setEngineState(s => s.sessions.some(x => x.id === id && x.buyerId === user.id) ? advanceSession(s, id) : s);
         try {
-            const res = await fetch(`/api/workspace/sessions/${id}/advance`, { method: "POST" });
+            const res = await fetch(`/api/workspace/sessions/${id}/advance`, {
+                method: "POST",
+                headers: viewerHeaders(),
+            });
             if (res.ok) {
                 const nextState = await res.json();
                 if (nextState && Array.isArray(nextState.sessions)) setEngineState(nextState);
@@ -152,7 +164,10 @@ export function DemoProvider({ enabled, products, initialData, children }: {
             return session ? finishDeal(s, session) : s;
         });
         try {
-            const res = await fetch(`/api/workspace/sessions/${id}/approve`, { method: "POST" });
+            const res = await fetch(`/api/workspace/sessions/${id}/approve`, {
+                method: "POST",
+                headers: viewerHeaders(),
+            });
             if (res.ok) {
                 const nextState = await res.json();
                 if (nextState && Array.isArray(nextState.deals)) setEngineState(nextState);
@@ -168,7 +183,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         try {
             const res = await fetch(`/api/workspace/sessions/${id}/end`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: viewerHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({ buyer_id: user.id, status }),
             });
             if (res.ok) {
@@ -186,7 +201,8 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         try {
             const res = await fetch(`/api/workspace/requests/${path}`, {
                 method: "POST",
-                ...(body ? { headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {}),
+                headers: body ? viewerHeaders({ "Content-Type": "application/json" }) : viewerHeaders(),
+                ...(body ? { body: JSON.stringify(body) } : {}),
             });
             if (!res.ok) {
                 notify("The request could not be updated. Try again.");
@@ -204,7 +220,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         try {
             const res = await fetch("/api/workspace/requests", {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: viewerHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({
                     buyer_id: user.id,
                     product_ids: input.productIds,
@@ -234,7 +250,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         try {
             const res = await fetch(endpoint, {
                 method,
-                headers: { "Content-Type": "application/json" },
+                headers: viewerHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({
                     seller_id: user.id,
                     name: input.name,
@@ -279,7 +295,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         try {
             const res = await fetch(`/api/workspace/products/${input.productId}/rules`, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
+                headers: viewerHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({
                     seller_id: user.id,
                     minimum: input.minimum,
@@ -314,7 +330,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         try {
             const res = await fetch(`/api/workspace/deals/${dealId}/rating`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: viewerHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({ buyer_id: user.id, rating, feedback }),
             });
             if (res.ok) {
@@ -354,7 +370,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         try {
             const res = await fetch(`/api/workspace/users/${user.id}`, {
                 method: "PUT",
-                headers: { "Content-Type": "application/json" },
+                headers: viewerHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({ name, email }),
             });
             if (res.ok) {
@@ -379,7 +395,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
         try {
             const res = await fetch(`/api/workspace/users/${targetUserId}/status`, {
                 method: "PATCH",
-                headers: { "Content-Type": "application/json" },
+                headers: viewerHeaders({ "Content-Type": "application/json" }),
                 body: JSON.stringify({ active }),
             });
             if (res.ok) {

@@ -125,6 +125,18 @@ async function run() {
   assert.equal(JSON.stringify(buyerView).includes('"minimum"'),false);
   const sellerView=model.projectDemoState(state,state.users[0]);
   assert.equal(JSON.stringify(sellerView).includes('"budget"'),false);
+  // Verify Competitive Leverage (multi-seller competing offer pressure).
+  let sNoLev = fresh(); sNoLev.sessions[0].requestId = 301;
+  sNoLev = model.advanceSession(sNoLev, 101); sNoLev = model.advanceSession(sNoLev, 101); // Round 1
+  sNoLev = model.advanceSession(sNoLev, 101); sNoLev = model.advanceSession(sNoLev, 101); // Round 2 without leverage
+  let sWithLev = fresh(); sWithLev.sessions[0].requestId = 301;
+  sWithLev = model.advanceSession(sWithLev, 101); sWithLev = model.advanceSession(sWithLev, 101); // Round 1
+  sWithLev = model.advanceSession(sWithLev, 101, 3500); sWithLev = model.advanceSession(sWithLev, 101, 3500); // Round 2 with 3500 SAR competing offer
+  const r2NoLev = sNoLev.sessions[0].rounds.filter(r => r.agent === "seller")[1];
+  const r2WithLev = sWithLev.sessions[0].rounds.filter(r => r.agent === "seller")[1];
+  assert.ok(r2WithLev.price < r2NoLev.price, "Competitive leverage lowers seller counteroffer faster");
+  assert.equal(r2WithLev.leverageApplied, true);
+  assert.ok(r2WithLev.price >= sWithLev.rules[0].minimum, "Competitive leverage never breaches seller floor");
   console.log("PASS: two-agent alternation, monotonic offers, pricing boundaries, max-round exhaustion, all four scenarios and role-data privacy.");
   const products = await api.getProducts(); products[0].name = "mutated";
   assert.notEqual((await api.getProducts())[0].name, "mutated");

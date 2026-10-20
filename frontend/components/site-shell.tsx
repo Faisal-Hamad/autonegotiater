@@ -7,7 +7,7 @@ import { useDemo } from "./demo-provider";
 const sections = {
     buyer: ["Overview", "Requests", "Negotiations", "Deals", "Notifications"],
     seller: ["Overview", "Products", "Negotiations", "Deals", "Notifications"],
-    admin: ["Overview", "Users", "Sellers", "Products", "Negotiations", "Reports", "Permissions", "System", "Audit-logs"],
+    admin: ["Overview", "Users", "Sellers", "Products", "Requests", "Negotiations", "Reports", "Permissions", "System", "Audit-logs"],
 };
 
 const navigationLabels: Record<string, string> = {
