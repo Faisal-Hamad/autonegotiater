@@ -6,6 +6,15 @@ import { money } from "@/lib/demo-model";
 import { useDemo } from "./demo-provider";
 import { Badge, Empty, Heading } from "./ui";
 const MAX_SELLERS = 5;
+
+function getModelKey(name: string): string | null {
+    const lower = name.toLowerCase();
+    if (lower.includes("iphone 15 pro") || lower.includes("iphone 15")) return "iPhone 15 Pro";
+    if (lower.includes("playstation 5") || lower.includes("ps5")) return "PlayStation 5";
+    if (lower.includes("galaxy s24") || lower.includes("s24 ultra") || lower.includes("s24")) return "Samsung Galaxy S24 Ultra";
+    return null;
+}
+
 export function ProductImage({ product }: {
     product: Product;
 }) {
@@ -42,7 +51,7 @@ export function ProductCatalog({ products: realProducts }: {
         <p className="eyebrow">Recommended · one buyer, many sellers</p>
         <h2>Let your agent negotiate with several sellers at once</h2>
         <ol className="list-decimal ml-5 mt-3 space-y-1 text-sm">
-        <li>Press <strong>Add to multi-seller negotiation</strong> on 2 to {MAX_SELLERS} listings that would all satisfy you (or open any product for 1-click category negotiation).</li>
+        <li>Press <strong>Add to multi-seller negotiation</strong> on 2 to {MAX_SELLERS} listings that would all satisfy you (or open any product for 1-click negotiation across sellers).</li>
         <li>Press <strong>Negotiate with these sellers</strong> in the bar at the bottom of the screen.</li>
         <li>Your agent bargains with every seller in parallel, uses the best competing quote as leverage, and scores offers using your ranking and budget.</li>
         </ol>
@@ -137,8 +146,18 @@ export function ProductDetails({ product: original }: {
     const { enabled, state, user } = useDemo();
     const p = enabled ? state.products.find(p => p.id === original.id) ?? original : original;
     const basePrice = Number(p.base_price);
-    const competitors = (enabled ? state.products : []).filter(other => other.id !== p.id && other.stock_quantity > 0 && other.category === p.category).sort((a, b) => Math.abs(Number(a.base_price) - basePrice) - Math.abs(Number(b.base_price) - basePrice)).slice(0, MAX_SELLERS - 1);
+    const modelKey = getModelKey(p.name);
+    const available = (enabled ? state.products : []).filter(other => other.id !== p.id && other.stock_quantity > 0 && other.seller_id !== p.seller_id);
+    const sameModelMatches = modelKey ? available.filter(other => getModelKey(other.name) === modelKey) : [];
+    const otherCategoryMatches = available
+        .filter(other => !sameModelMatches.some(sm => sm.id === other.id) && other.category === p.category)
+        .sort((a, b) => Math.abs(Number(a.base_price) - basePrice) - Math.abs(Number(b.base_price) - basePrice));
+
+    const competitors = [...sameModelMatches, ...otherCategoryMatches].slice(0, MAX_SELLERS - 1);
     const quickIds = [p.id, ...competitors.map(c => c.id)];
+    const hasSameModel = sameModelMatches.length > 0;
+    const targetLabel = modelKey && hasSameModel ? modelKey : p.category;
+
     return <>
     <Link href="/products" className="text-indigo-600 text-sm">← Back to marketplace</Link>
     <div className="grid md:grid-cols-2 gap-8 mt-6">
@@ -151,30 +170,32 @@ export function ProductDetails({ product: original }: {
     <p className="mt-5 text-sm">{p.stock_quantity > 0 ? `${p.stock_quantity} units available` : "Out of stock"}</p>
     <p className="mt-5 muted whitespace-pre-wrap">{p.description || "No description provided."}</p>
     <div className="mt-8">{p.stock_quantity < 1 ? <button className="btn w-full" disabled>Out of stock</button> : enabled && user.role === "buyer" ? <div className="space-y-3">
-    {quickIds.length >= 2 && <Link className="btn w-full" href={`/negotiate?products=${quickIds.join(",")}`}>Negotiate with {quickIds.length} competing sellers in {p.category} →</Link>}
+    {quickIds.length >= 2 && <Link className="btn w-full" href={`/negotiate?products=${quickIds.join(",")}`}>Negotiate with {quickIds.length} competing sellers for {targetLabel} →</Link>}
     <Link className={quickIds.length >= 2 ? "btn-secondary w-full" : "btn w-full"} href={`/products?select=${p.id}`}>+ Select custom listings in marketplace →</Link>
-    <p className="muted text-xs text-center">Recommended: negotiate with several sellers at once so your agent uses the lowest offer as leverage and keeps the best deal.</p>
+    <p className="muted text-xs text-center">Recommended: negotiate with several sellers at once so your agent uses the lowest offer as leverage and secures the best deal for this product.</p>
     <Link className="btn-secondary w-full" href={`/products/${p.id}/negotiate`}>Negotiate with this seller only</Link>
     </div> : <p className="panel text-sm">{enabled ? "Switch to a buyer identity to start a negotiation." : "Negotiation setup requires an authenticated buyer and a supported FastAPI endpoint."}</p>}</div>
     </div>
     </div>
     <div className="panel mt-6">
-    <h2>Competing sellers in {p.category}</h2>
-    <p className="muted mt-2">When you start a multi-seller negotiation, your agent negotiates with each seller in parallel, uses the lowest competing offer as anonymous leverage, and scores offers using your budget and preference ranking.</p>
+    <h2>{hasSameModel ? `Competing sellers offering ${targetLabel}` : `Competing sellers in ${p.category}`}</h2>
+    <p className="muted mt-2">{hasSameModel ? "Multiple sellers have active listings for this product with distinct condition notes, accessories, and prices. When you start a multi-seller negotiation, your agent negotiates with each seller in parallel, uses the lowest competing offer as anonymous leverage, and scores offers using your budget and preference ranking." : "When you start a multi-seller negotiation, your agent negotiates with each seller in parallel, uses the lowest competing offer as anonymous leverage, and scores offers using your budget and preference ranking."}</p>
     {competitors.length > 0 && <div className="table-wrap mt-4">
         <table>
         <thead>
         <tr>
         <th>Listing</th>
         <th>Seller</th>
+        <th>Condition & Specifications</th>
         <th>Public price</th>
         <th>Stock</th>
         </tr>
         </thead>
         <tbody>{[p, ...competitors].map((item, idx) => <tr key={item.id}>
-            <td><Link className="text-indigo-600" href={`/products/${item.id}`}>{item.name}</Link>{idx === 0 && <span className="ml-2 text-xs text-indigo-700 font-semibold">(Current listing)</span>}</td>
+            <td><Link className="text-indigo-600 font-medium" href={`/products/${item.id}`}>{item.name}</Link>{idx === 0 && <span className="ml-2 text-xs text-indigo-700 font-semibold">(Current listing)</span>}</td>
             <td>{state.users.find(u => u.id === item.seller_id)?.name ?? `Seller #${item.seller_id}`}</td>
-            <td>{money(item.base_price)}</td>
+            <td className="text-xs text-slate-600 max-w-sm whitespace-pre-wrap leading-relaxed">{item.description || "No condition notes provided."}</td>
+            <td className="font-semibold">{money(item.base_price)}</td>
             <td>{item.stock_quantity}</td>
         </tr>)}</tbody>
         </table>

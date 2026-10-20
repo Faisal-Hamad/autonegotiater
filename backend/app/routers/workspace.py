@@ -124,6 +124,148 @@ async def ensure_initial_workspace_data(session: AsyncSession) -> None:
             )
             await session.flush()
 
+    # Multi-Seller Product Listings (3 Competing Sellers per Model: iPhone 15 Pro, PS5, Samsung S24)
+    sellers = (await session.scalars(select(User).where(User.role == "seller").order_by(User.id))).all()
+    if len(sellers) >= 3:
+        multi_seller_seed = [
+            (
+                sellers[0].id,
+                "iPhone 15 Pro 256GB - Natural Titanium",
+                "Electronics",
+                Decimal("3850.00"),
+                Decimal("3300.00"),
+                2,
+                "Natural Titanium, 95% battery health. Mint condition with zero scratches. Includes original retail box, braided USB-C cable, and 3 months remaining Jarir warranty.",
+                "https://cdn.dummyjson.com/product-images/smartphones/iphone-13-pro/thumbnail.webp",
+            ),
+            (
+                sellers[1].id,
+                "iPhone 15 Pro 256GB - Blue Titanium",
+                "Electronics",
+                Decimal("3700.00"),
+                Decimal("3150.00"),
+                1,
+                "Blue Titanium, 89% battery health. Minor cosmetic hairline scuff on bottom bezel. Screen protector applied from day one. Includes 2 MagSafe protective cases.",
+                "https://cdn.dummyjson.com/product-images/smartphones/iphone-13-pro/thumbnail.webp",
+            ),
+            (
+                sellers[2].id,
+                "iPhone 15 Pro 256GB - Black Titanium",
+                "Electronics",
+                Decimal("3790.00"),
+                Decimal("3200.00"),
+                2,
+                "Black Titanium, 92% battery health. Handset only (no box). Fully functional, Face ID and cameras tested 100%. Hand-to-hand pickup in Buraydah or fast courier shipping.",
+                "https://cdn.dummyjson.com/product-images/smartphones/iphone-13-pro/thumbnail.webp",
+            ),
+            (
+                sellers[0].id,
+                "PlayStation 5 Slim Disc Edition 1TB",
+                "Electronics",
+                Decimal("1950.00"),
+                Decimal("1650.00"),
+                2,
+                "Slim Disc Edition with 1TB SSD. Comes with two DualSense wireless controllers (White & Midnight Black) and 2 physical games (EA FC 24 and Spider-Man 2). Lightly used.",
+                "https://cdn.dummyjson.com/product-images/tablets/ipad-mini-2021-starlight/thumbnail.webp",
+            ),
+            (
+                sellers[1].id,
+                "PlayStation 5 Digital Edition 1TB",
+                "Electronics",
+                Decimal("1720.00"),
+                Decimal("1480.00"),
+                1,
+                "Digital Edition 1TB in pristine condition. Single white DualSense controller, high-speed HDMI 2.1 cable, original power lead, and original packaging. Zero fan noise.",
+                "https://cdn.dummyjson.com/product-images/tablets/ipad-mini-2021-starlight/thumbnail.webp",
+            ),
+            (
+                sellers[2].id,
+                "PlayStation 5 Disc Edition 825GB",
+                "Electronics",
+                Decimal("1820.00"),
+                Decimal("1550.00"),
+                2,
+                "Original Disc model with vertical cooling charging stand included. 1 DualSense controller. Clean thermals, regularly dusted, excellent operating condition.",
+                "https://cdn.dummyjson.com/product-images/tablets/ipad-mini-2021-starlight/thumbnail.webp",
+            ),
+            (
+                sellers[0].id,
+                "Samsung Galaxy S24 Ultra 256GB Titanium Gray",
+                "Electronics",
+                Decimal("3700.00"),
+                Decimal("3150.00"),
+                2,
+                "Titanium Gray, 256GB, 12GB RAM. Embedded S-Pen included. Factory screen protector intact, immaculate body condition, original 45W fast wall charger and box included.",
+                "https://cdn.dummyjson.com/product-images/smartphones/samsung-galaxy-s10/thumbnail.webp",
+            ),
+            (
+                sellers[1].id,
+                "Samsung Galaxy S24 Ultra 256GB Titanium Violet",
+                "Electronics",
+                Decimal("3550.00"),
+                Decimal("3000.00"),
+                1,
+                "Titanium Violet, 256GB. Battery health excellent. Tiny surface mark near speaker grill, otherwise flawless. Comes with Samsung Smart View wallet cover.",
+                "https://cdn.dummyjson.com/product-images/smartphones/samsung-galaxy-s10/thumbnail.webp",
+            ),
+            (
+                sellers[2].id,
+                "Samsung Galaxy S24 Ultra 512GB Titanium Black",
+                "Electronics",
+                Decimal("3950.00"),
+                Decimal("3350.00"),
+                1,
+                "Upgraded 512GB storage capacity, Titanium Black. Dual SIM (nano + eSIM). Clean IMEI, fully unlocked, with official Samsung clear grip case.",
+                "https://cdn.dummyjson.com/product-images/smartphones/samsung-galaxy-s10/thumbnail.webp",
+            ),
+        ]
+
+        legacy_renames = {
+            "iPhone 15 Pro 256GB": ("iPhone 15 Pro 256GB - Natural Titanium", multi_seller_seed[0]),
+            "PlayStation 5 Slim": ("PlayStation 5 Slim Disc Edition 1TB", multi_seller_seed[3]),
+            "Samsung Galaxy S24 Ultra": ("Samsung Galaxy S24 Ultra 256GB Titanium Gray", multi_seller_seed[6]),
+        }
+        for old_name, (new_name, spec) in legacy_renames.items():
+            existing_legacy = await session.scalar(select(Product).where(Product.name == old_name))
+            if existing_legacy:
+                existing_legacy.name = new_name
+                existing_legacy.description = spec[6]
+                existing_legacy.base_price = spec[3]
+                existing_legacy.min_acceptable_price = spec[4]
+                if not existing_legacy.image_url:
+                    existing_legacy.image_url = spec[7]
+
+        existing_names = set((await session.scalars(select(Product.name))).all())
+        needs_commit = False
+        for s_id, p_name, p_cat, p_base, p_min, p_stock, p_desc, p_img in multi_seller_seed:
+            if p_name not in existing_names:
+                new_prod = Product(
+                    seller_id=s_id,
+                    name=p_name,
+                    category=p_cat,
+                    base_price=p_base,
+                    min_acceptable_price=p_min,
+                    stock_quantity=p_stock,
+                    description=p_desc,
+                    image_url=p_img,
+                )
+                session.add(new_prod)
+                await session.flush()
+                session.add(
+                    SellerRule(
+                        seller_id=s_id,
+                        product_id=new_prod.id,
+                        min_price=p_min,
+                        max_discount=Decimal("20.00"),
+                        max_rounds=4,
+                        auto_accept_threshold=(p_base * Decimal("0.95")).quantize(CENT, rounding=ROUND_HALF_UP),
+                    )
+                )
+                existing_names.add(p_name)
+                needs_commit = True
+        if needs_commit:
+            await session.commit()
+
     products = (await session.scalars(select(Product).order_by(Product.id))).all()
     existing_rule_pids = set((await session.scalars(select(SellerRule.product_id))).all())
     for p in products:

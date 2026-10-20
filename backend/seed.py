@@ -24,11 +24,21 @@ USERS = [
 
 # (seller index, name, category, base price SAR, min acceptable %, stock, description)
 PRODUCTS = [
-    (0, "iPhone 15 Pro 256GB", "Electronics", 3900, 0.85, 2, "Used 8 months, battery health 94%, with box."),
-    (0, "Samsung Galaxy S24 Ultra", "Electronics", 3600, 0.82, 1, "Titanium gray, minor scratches on frame."),
-    (0, "MacBook Air M2 13\"", "Electronics", 3800, 0.80, 1, "8GB RAM, 256GB SSD, 120 battery cycles."),
+    # iPhone 15 Pro (3 competing sellers)
+    (0, "iPhone 15 Pro 256GB - Natural Titanium", "Electronics", 3850, 0.85, 2, "Natural Titanium, 95% battery health. Mint condition with zero scratches. Includes original retail box, braided USB-C cable, and 3 months remaining Jarir warranty."),
+    (1, "iPhone 15 Pro 256GB - Blue Titanium", "Electronics", 3700, 0.85, 1, "Blue Titanium, 89% battery health. Minor cosmetic hairline scuff on bottom bezel. Screen protector applied from day one. Includes 2 MagSafe protective cases."),
+    (2, "iPhone 15 Pro 256GB - Black Titanium", "Electronics", 3790, 0.84, 2, "Black Titanium, 92% battery health. Handset only (no box). Fully functional, Face ID and cameras tested 100%. Hand-to-hand pickup in Buraydah or fast courier shipping."),
+    # PlayStation 5 (3 competing sellers)
+    (0, "PlayStation 5 Slim Disc Edition 1TB", "Electronics", 1950, 0.84, 2, "Slim Disc Edition with 1TB SSD. Comes with two DualSense wireless controllers (White & Midnight Black) and 2 physical games (EA FC 24 and Spider-Man 2). Lightly used."),
+    (1, "PlayStation 5 Digital Edition 1TB", "Electronics", 1720, 0.85, 1, "Digital Edition 1TB in pristine condition. Single white DualSense controller, high-speed HDMI 2.1 cable, original power lead, and original packaging. Zero fan noise."),
+    (2, "PlayStation 5 Disc Edition 825GB", "Electronics", 1820, 0.85, 2, "Original Disc model with vertical cooling charging stand included. 1 DualSense controller. Clean thermals, regularly dusted, excellent operating condition."),
+    # Samsung Galaxy S24 Ultra (3 competing sellers)
+    (0, "Samsung Galaxy S24 Ultra 256GB Titanium Gray", "Electronics", 3700, 0.85, 2, "Titanium Gray, 256GB, 12GB RAM. Embedded S-Pen included. Factory screen protector intact, immaculate body condition, original 45W fast wall charger and box included."),
+    (1, "Samsung Galaxy S24 Ultra 256GB Titanium Violet", "Electronics", 3550, 0.84, 1, "Titanium Violet, 256GB. Battery health excellent. Tiny surface mark near speaker grill, otherwise flawless. Comes with Samsung Smart View wallet cover."),
+    (2, "Samsung Galaxy S24 Ultra 512GB Titanium Black", "Electronics", 3950, 0.84, 1, "Upgraded 512GB storage capacity, Titanium Black. Dual SIM (nano + eSIM). Clean IMEI, fully unlocked, with official Samsung clear grip case."),
+    # Other electronics
+    (0, "MacBook Air M2 13-inch", "Electronics", 3800, 0.80, 1, "8GB RAM, 256GB SSD, 120 battery cycles."),
     (0, "Sony WH-1000XM5 Headphones", "Electronics", 950, 0.75, 3, "Noise cancelling, like new."),
-    (0, "PlayStation 5 Slim", "Electronics", 1900, 0.85, 2, "Disc edition with two controllers."),
     (1, "L-Shaped Sofa (Grey)", "Furniture", 2200, 0.70, 1, "5-seater fabric sofa, 2 years old."),
     (1, "Dining Table with 6 Chairs", "Furniture", 1800, 0.75, 1, "Solid wood, pickup from Riyadh."),
     (1, "Office Chair Ergonomic", "Furniture", 650, 0.80, 4, "Mesh back, adjustable arms and lumbar support."),
