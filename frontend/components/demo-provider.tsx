@@ -48,7 +48,7 @@ type Context = {
     endNegotiation: (id: number, status: "rejected" | "cancelled") => Promise<void>;
     createRequest: (input: RequestInput) => Promise<{ id: number } | { error: string }>;
     advanceRequest: (id: number) => Promise<void>;
-    approveRequest: (id: number) => Promise<void>;
+    approveRequest: (id: number, sessionId?: number) => Promise<void>;
     endRequest: (id: number, status: "rejected" | "cancelled") => Promise<void>;
     saveProduct: (input: ProductInput) => Promise<boolean>;
     saveRules: (input: RulesInput) => Promise<boolean>;
@@ -225,7 +225,7 @@ export function DemoProvider({ enabled, products, initialData, children }: {
     }
 
     const advanceRequest = (id: number) => requestAction(`${id}/advance`);
-    const approveRequest = (id: number) => requestAction(`${id}/approve`);
+    const approveRequest = (id: number, sessionId?: number) => requestAction(`${id}/approve`, sessionId === undefined ? undefined : { session_id: sessionId });
     const endRequest = (id: number, status: "rejected" | "cancelled") => requestAction(`${id}/end`, { buyer_id: user.id, status });
 
     async function saveProduct(input: ProductInput): Promise<boolean> {

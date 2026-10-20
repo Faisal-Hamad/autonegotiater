@@ -280,7 +280,10 @@ export function RequestDetail({ id }: {
         if (text) notify(text);
     };
     const rows = request.sessionIds.map(sid => state.sessions.find(s => s.id === sid)).filter(s => s !== undefined).sort((a, b) => request.productIds.indexOf(a.productId) - request.productIds.indexOf(b.productId));
-    const chosen = rows.find(s => s.status === "awaiting_approval" || s.status === "completed");
+    const chosen = rows.find(s => s.status === "completed");
+    // Offers both agents agreed on; in semi-automated mode the buyer picks one.
+    const agreed = rows.filter(s => s.status === "awaiting_approval").map(s => ({ session: s, score: s.rounds.at(-1)?.utility ?? 0 })).sort((a, b) => b.score - a.score);
+    const recommended = agreed[0]?.session;
     const round = Math.max(0, ...rows.map(s => negotiationRoundCount(s)));
     const deal = chosen && state.deals.find(d => d.sessionId === chosen.id);
     return <>
@@ -307,14 +310,14 @@ export function RequestDetail({ id }: {
         const last = s.rounds.at(-1);
         const buyerTurn = s.rounds.filter(t => t.agent === "buyer").at(-1);
         const sellerTurn = s.rounds.filter(t => t.agent === "seller").at(-1);
-        return <tr key={s.id} className={s.id === chosen?.id ? "bg-emerald-50" : ""}>
+        return <tr key={s.id} className={s.id === chosen?.id || (request.status === "awaiting_approval" && s.id === recommended?.id) ? "bg-emerald-50" : ""}>
         <td>#{request.productIds.indexOf(s.productId) + 1}</td>
         <td><Link className="text-indigo-600" href={`/dashboard/buyer/negotiations/${s.id}`}>{p?.name ?? "Listing"}</Link><br /><span className="muted text-xs">Listed {p ? money(p.base_price) : "-"}</span></td>
         <td>{state.users.find(u => u.id === p?.seller_id)?.name ?? "Seller"}</td>
         <td>{buyerTurn ? money(buyerTurn.price) : "-"}</td>
         <td>{sellerTurn ? `${money(sellerTurn.price)}${sellerTurn.action === "accept" ? " ✓" : ""}` : "-"}</td>
         <td>{last?.utility !== undefined ? last.utility.toFixed(2) : "-"}</td>
-        <td><Badge>{s.status.replaceAll("_", " ")}</Badge></td>
+        <td><Badge>{s.status === "awaiting_approval" ? (s.id === recommended?.id ? "agreed · recommended" : "agreed") : s.status.replaceAll("_", " ")}</Badge></td>
         </tr>;
     })}</tbody>
     </table>
@@ -328,16 +331,21 @@ export function RequestDetail({ id }: {
     <ul className="list-disc ml-5 mt-3 space-y-2 muted">
     <li>Each round, your agent sends an offer to every seller and each seller agent replies.</li>
     <li>Your agent accepts a seller offer only if it is no higher than its own next offer.</li>
-    <li>When one or more sellers agree, your agent keeps the highest score and closes the other negotiations.</li>
+    <li>Bargaining continues with every seller until the last round, so each one can still lower its price.</li>
+    <li>{request.mode === "automated" ? "At the end, your agent closes the agreed offer with the highest score." : "At the end, you choose any agreed offer. The highest score is marked as recommended."}</li>
     </ul>
     {buyer && request.budget !== undefined && <p className="mt-4">Your private budget: <strong>{money(request.budget)}</strong></p>}
     </div>
     {buyer && request.status === "active" && <button className="btn w-full" disabled={busy} onClick={() => run(() => advanceRequest(id))}>{busy ? "Negotiating..." : `Run round ${round + 1} with all sellers`}</button>}
-    {buyer && request.status === "awaiting_approval" && chosen && <div className="panel">
-    <h2>Best offer selected</h2>
-    <p className="muted text-sm my-3">{state.products.find(p => p.id === chosen.productId)?.name} at <strong>{chosen.agreedPrice !== undefined ? money(chosen.agreedPrice) : "-"}</strong>. Your approval is required in semi-automated mode.</p>
-    <button className="btn w-full" disabled={busy} onClick={() => run(() => approveRequest(id), "Agreement confirmed and saved.")}>Confirm agreement</button>
-    <button className="btn-danger w-full mt-3" disabled={busy} onClick={() => run(() => endRequest(id, "rejected"), "Agreement rejected. No Agreement was created.")}>Reject agreement</button>
+    {buyer && request.status === "awaiting_approval" && agreed.length > 0 && <div className="panel">
+    <h2>Choose your offer</h2>
+    <p className="muted text-sm my-3">{agreed.length === 1 ? "One seller agreed." : `${agreed.length} sellers agreed.`} You are not limited to the lowest price: pick the one you want. The other negotiations close without an Agreement.</p>
+    <div className="space-y-3">{agreed.map(({ session: s, score }) => <div key={s.id} className={"rounded-xl border p-4 " + (s.id === recommended?.id ? "border-emerald-300 bg-emerald-50" : "border-slate-200")}>
+        <p className="font-bold">{state.products.find(p => p.id === s.productId)?.name}</p>
+        <p className="text-sm mt-1">{s.agreedPrice !== undefined ? money(s.agreedPrice) : "-"} · score {score.toFixed(2)}{s.id === recommended?.id && <span className="text-emerald-700 font-semibold"> · recommended</span>}</p>
+        <button className={(s.id === recommended?.id ? "btn" : "btn-secondary") + " w-full mt-3"} disabled={busy} onClick={() => run(() => approveRequest(id, s.id), "Agreement confirmed and saved.")}>Choose this offer</button>
+        </div>)}</div>
+    <button className="btn-danger w-full mt-4" disabled={busy} onClick={() => run(() => endRequest(id, "rejected"), "All offers rejected. No Agreement was created.")}>Reject all offers</button>
     </div>}
     {buyer && ["active", "awaiting_approval"].includes(request.status) && <button className="btn-danger w-full" disabled={busy} onClick={() => run(() => endRequest(id, "cancelled"), "Request cancelled with all sellers.")}>Cancel request</button>}
     {request.status === "completed" && deal && <Link className="btn w-full" href={`/dashboard/${user.role}/deals/${deal.id}`}>View completed Agreement →</Link>}

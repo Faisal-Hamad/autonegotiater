@@ -1240,9 +1240,37 @@ async def create_buyer_request(
     return {"request_id": req.id, "state": await build_workspace_state(session)}
 
 
+def _request_utility(req: BuyerRequest):
+    prefs = req.preferences if isinstance(req.preferences, dict) else {}
+    ranking = [int(pid) for pid in prefs.get("ranking", [])]
+    price_weight = float(prefs.get("price_weight", 0.6))
+
+    def utility(s: NegotiationSession, price: Decimal) -> Decimal:
+        rank = ranking.index(s.product_id) if s.product_id in ranking else len(ranking) - 1
+        return _offer_utility(price, req.max_budget, rank, len(ranking), price_weight)
+
+    return utility
+
+
+async def _agreed_offers(session: AsyncSession, sessions: list[NegotiationSession]) -> list[tuple[Offer, NegotiationSession]]:
+    agreed = []
+    for s in sessions:
+        if s.status != "active":
+            continue
+        last = await _last_offer(session, s.id)
+        if last is not None and last.status == "accepted":
+            agreed.append((last, s))
+    return agreed
+
+
 @router.post("/requests/{request_id}/advance")
 async def advance_buyer_request(request_id: int, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
-    """Play one round (buyer offer + seller response) in every open session, then compare."""
+    """Play one round (buyer offer + seller response) in every session still bargaining.
+
+    Sessions run until their last round, so every seller can still improve its offer.
+    When none is bargaining any more, the buyer chooses among the agreed offers
+    (semi-automated), or the agent closes the highest score (automated).
+    """
     req = await session.scalar(select(BuyerRequest).where(BuyerRequest.id == request_id).with_for_update())
     if not req or req.status != "active":
         return await build_workspace_state(session)
@@ -1253,79 +1281,82 @@ async def advance_buyer_request(request_id: int, session: AsyncSession = Depends
             if await _run_agent_turn(session, s) != "turn":
                 break
 
-    prefs = req.preferences if isinstance(req.preferences, dict) else {}
-    ranking = [int(pid) for pid in prefs.get("ranking", [])]
-    price_weight = float(prefs.get("price_weight", 0.6))
-
-    def utility(s: NegotiationSession, price: Decimal) -> Decimal:
-        rank = ranking.index(s.product_id) if s.product_id in ranking else len(ranking) - 1
-        return _offer_utility(price, req.max_budget, rank, len(ranking), price_weight)
-
-    # Candidates: sessions where the agents already agreed, plus seller counteroffers
-    # the buyer agent can accept (within its budget for that listing).
-    candidates: list[tuple[Decimal, NegotiationSession, bool]] = []
+    utility = _request_utility(req)
+    bargaining = False
     for s in sessions:
         if s.status != "active":
             continue
         last = await _last_offer(session, s.id)
         if last is None:
+            bargaining = True
             continue
         # Score the latest price on the table in each session, so the buyer can compare sellers.
         last.utility_score = utility(s, last.price)
-        agreed = last.status == "accepted"
-        acceptable = False
-        if last.offered_by == "seller" and not agreed:
-            limits = (await _session_meta(session, s.id)).get("privateLimits")
-            acceptable = bool(limits) and _buyer_accepts(limits, _cents(last.price), last.round_number, True)
-        if agreed or acceptable:
-            candidates.append((last.utility_score, s, agreed))
+        if last.status != "accepted":
+            bargaining = True
 
-    if candidates:
-        # Only one agreement per request: keep the best one and close the rest.
-        candidates.sort(key=lambda item: (item[0], -item[1].id), reverse=True)
-        score, chosen, agreed = candidates[0]
+    if not bargaining:
+        agreed = await _agreed_offers(session, sessions)
         if not agreed:
-            # The buyer agent accepts the best seller counteroffer.
-            await _run_agent_turn(session, chosen)
-            accepted = await _last_offer(session, chosen.id)
-            if accepted is not None:
-                accepted.utility_score = score
-        await _close_request_sessions(session, sessions, chosen.id, "not_selected")
-        session.add(
-            AuditLog(
-                session_id=chosen.id,
-                user_id=req.buyer_id,
-                action="request_offer_selected",
-                details={"request_id": req.id, "candidates": len(candidates)},
-            )
-        )
-        if chosen.status != "active":
             req.status = "failed"
             req.ended_at = datetime.now(timezone.utc)
         elif req.mode == "automated":
+            offer, chosen = max(agreed, key=lambda item: (item[0].utility_score or 0, -item[1].id))
+            await _close_request_sessions(session, sessions, chosen.id, "not_selected")
+            session.add(
+                AuditLog(
+                    session_id=chosen.id,
+                    user_id=req.buyer_id,
+                    action="request_offer_selected",
+                    details={"request_id": req.id, "candidates": len(agreed), "chosen_by": "agent"},
+                )
+            )
             await _finish_request(session, req, chosen, closed_by="system")
         else:
             req.status = "awaiting_approval"
-    elif all(s.status != "active" for s in sessions):
-        req.status = "failed"
-        req.ended_at = datetime.now(timezone.utc)
 
     await session.commit()
     return await build_workspace_state(session)
 
 
+class ApproveRequestPayload(BaseModel):
+    session_id: int | None = None  # the offer the buyer chose; defaults to the highest score
+
+
 @router.post("/requests/{request_id}/approve")
-async def approve_buyer_request(request_id: int, session: AsyncSession = Depends(get_session)) -> dict[str, Any]:
+async def approve_buyer_request(
+    request_id: int, payload: ApproveRequestPayload | None = None, session: AsyncSession = Depends(get_session)
+) -> dict[str, Any]:
     req = await session.scalar(select(BuyerRequest).where(BuyerRequest.id == request_id).with_for_update())
     if not req or req.status != "awaiting_approval":
         return await build_workspace_state(session)
 
-    chosen = next((s for s in await _request_sessions(session, req.id) if s.status == "active"), None)
-    if chosen is None:
+    sessions = await _request_sessions(session, req.id)
+    agreed = await _agreed_offers(session, sessions)
+    if not agreed:
         req.status = "failed"
         req.ended_at = datetime.now(timezone.utc)
+        await session.commit()
+        return await build_workspace_state(session)
+
+    chosen_id = payload.session_id if payload else None
+    if chosen_id is None:
+        chosen = max(agreed, key=lambda item: (item[0].utility_score or 0, -item[1].id))[1]
     else:
-        await _finish_request(session, req, chosen, closed_by="buyer")
+        chosen = next((s for _, s in agreed if s.id == chosen_id), None)
+        if chosen is None:
+            raise HTTPException(status_code=400, detail="Choose one of the agreed offers in this request.")
+
+    await _close_request_sessions(session, sessions, chosen.id, "not_selected")
+    session.add(
+        AuditLog(
+            session_id=chosen.id,
+            user_id=req.buyer_id,
+            action="request_offer_selected",
+            details={"request_id": req.id, "candidates": len(agreed), "chosen_by": "buyer"},
+        )
+    )
+    await _finish_request(session, req, chosen, closed_by="buyer")
     await session.commit()
     return await build_workspace_state(session)
 
