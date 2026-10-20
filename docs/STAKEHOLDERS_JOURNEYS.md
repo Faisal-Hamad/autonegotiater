@@ -8,28 +8,33 @@ This document formally specifies the end-to-end user journeys for the primary st
 
 **Primary Goal:** Enable buyers to discover desired products and autonomously negotiate optimal transaction terms (price, warranty, delivery) without psychological friction, time investment, or disclosing their true budget limit.
 
+The main flow is **one buyer, many sellers**: the buyer's agent negotiates with several sellers at the same time and the buyer keeps the offer they prefer. **One buyer, one seller** remains available for a single listing. See `MULTI_SELLER.md` for the design.
+
 ```
-[Discover Product] ➔ [Configure Reservation Limits] ➔ [Delegate to AI Agent] ➔ [Monitor Live Rounds] ➔ [Human-in-the-Loop Confirmation] ➔ [Deal Settlement & Review]
+[Select 2-5 Listings] ➔ [Rank & Configure Limits] ➔ [Delegate to AI Agent] ➔ [Parallel Rounds with Every Seller] ➔ [Choose & Confirm One Offer] ➔ [Deal Settlement & Review]
 ```
 
 ### Detailed Lifecycle Phases:
 1. **Discovery & Exploration (Pre-Negotiation):**
    - The buyer browses the catalog (`/products`) filtered by category or keyword.
    - Evaluates product condition, descriptions, and public base prices. Secret reservation prices remain strictly obscured (NFR-03).
+   - Adds 2 to 5 listings that would all satisfy them to a multi-seller negotiation (*Add to multi-seller negotiation*), or opens one listing and chooses *Negotiate with this seller only*.
 2. **Preference & Budget Elicitation (Configuration):**
-   - Initiates negotiation by selecting *Start Negotiation*.
-   - Specifies a confidential **Maximum Budget (`max_budget`)**, securely stored and never shared with the counterparty or seller's agent.
+   - In a multi-seller negotiation, ranks the selected listings by preference and chooses what matters most (lowest price, balanced, or preferred listing). These set the weights of the utility score used to compare different products.
+   - Specifies a confidential **Maximum Budget (`max_budget`)**, securely stored and never shared with the counterparty or seller's agent. One budget covers all the selected listings.
    - Sets non-price condition preferences (acceptable delivery timeframes, required warranty period).
    - Selects operational mode:
      - **Automated Mode:** The agent finalizes the agreement autonomously once terms fall within budget.
      - **Semi-Automated Mode (Default - FR4):** The agent negotiates the terms, but requires explicit final buyer confirmation before closing.
 3. **Autonomous Negotiation Execution (During Session):**
-   - The buyer's AI agent initiates bargaining rounds via background Celery tasks.
+   - The buyer's AI agent initiates bargaining rounds via background Celery tasks. In a multi-seller negotiation it runs one session per seller, and each round updates every seller until the last round, so each seller can still improve its offer.
+   - The Request page (`/dashboard/buyer/requests/<id>`) compares all sellers side by side, with each offer's utility score.
    - Counter-offers are calculated using mathematical concession curves (e.g., time-dependent Boulware/Conceder strategies).
    - The buyer tracks session status, round history, and current offers live from the Buyer Dashboard (`/dashboard/buyer`), with full authority to manually abort the session at any time (FR9).
 4. **Human-in-the-Loop Approval & Finalization (Post-Negotiation):**
    - When a mutual convergence occurs, the buyer receives a comprehensive deal summary card detailing final agreed price, warranty duration, and delivery method.
-   - In semi-automated mode, the buyer explicitly approves (`Confirm Deal`) or rejects the agreement.
+   - In semi-automated mode, the buyer explicitly approves (`Confirm Deal`) or rejects the agreement. In a multi-seller negotiation, the buyer sees every agreed offer with the highest score marked as recommended, selects any of them (not necessarily the cheapest), can change the selection freely, and confirms one. Confirmation is final and the other sessions close without a deal.
+   - In automated mode, the agent closes the agreed offer with the highest score.
 5. **Settlement & Feedback:**
    - The transaction is recorded in the immutable `deals` ledger.
    - The buyer provides a 1-to-5 star rating and feedback on the seller and the negotiation experience (FR6).
@@ -95,4 +100,4 @@ This document formally specifies the end-to-end user journeys for the primary st
 | **Primary Input** | Maximum Budget (`max_budget`), utility weights | Floor Price (`min_price`), concession rules | Governance policies, audit queries |
 | **Confidential Data** | Reservation price hidden from seller | Floor price hidden from buyer | No access to raw payment credentials |
 | **Agent Autonomy** | Full or semi-automated with human approval | Delegated autonomous rule execution | Oversight of agent health and timeouts |
-| **Core Interface** | Catalog (`/products`), Buyer Hub (`/dashboard/buyer`) | Seller Hub (`/dashboard/seller`), Rule Editor | Admin Portal (`/dashboard/admin`), Audit Logs |
+| **Core Interface** | Catalog (`/products`), Buyer Hub (`/dashboard/buyer`), Multi-seller Requests (`/dashboard/buyer/requests`) | Seller Hub (`/dashboard/seller`), Rule Editor | Admin Portal (`/dashboard/admin`), Audit Logs |

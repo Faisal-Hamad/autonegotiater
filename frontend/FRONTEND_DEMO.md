@@ -23,8 +23,8 @@ Open the URL printed by Next.js, normally `http://localhost:3000`.
 | Area | Routes |
 | --- | --- |
 | Public | `/`, `/products`, `/products/[id]` |
-| Buyer setup | `/products/[id]/negotiate` |
-| Buyer workspace | `/dashboard/buyer`, `/dashboard/buyer/negotiations`, `/dashboard/buyer/negotiations/[id]`, `/dashboard/buyer/deals`, `/dashboard/buyer/deals/[id]`, `/dashboard/buyer/notifications` |
+| Buyer setup | `/negotiate?products=1,2,3` (multi-seller), `/products/[id]/negotiate` (one seller) |
+| Buyer workspace | `/dashboard/buyer`, `/dashboard/buyer/requests`, `/dashboard/buyer/requests/[id]`, `/dashboard/buyer/negotiations`, `/dashboard/buyer/negotiations/[id]`, `/dashboard/buyer/deals`, `/dashboard/buyer/deals/[id]`, `/dashboard/buyer/notifications` |
 | Seller workspace | `/dashboard/seller`, `/dashboard/seller/products`, `/dashboard/seller/products/new`, `/dashboard/seller/products/[id]/edit`, `/dashboard/seller/products/[id]/rules`, `/dashboard/seller/negotiations`, `/dashboard/seller/negotiations/[id]`, `/dashboard/seller/deals`, `/dashboard/seller/deals/[id]`, `/dashboard/seller/notifications` |
 | Admin workspace | `/dashboard/admin`, `/dashboard/admin/users`, `/dashboard/admin/sellers`, `/dashboard/admin/products`, `/dashboard/admin/negotiations`, `/dashboard/admin/negotiations/[id]`, `/dashboard/admin/reports`, `/dashboard/admin/permissions`, `/dashboard/admin/system`, `/dashboard/admin/audit-logs` |
 | Shared | `/login`, `/register`, `/profile`, `/notifications` |
@@ -35,7 +35,7 @@ Open the URL printed by Next.js, normally `http://localhost:3000`.
 
 The default buyer is Noura (4). Use the explicitly labeled identity selector or login demo to explore other accounts. Registration creates a buyer or seller identity locally; it cannot create an administrator. The demo identity selector is not real authorization, and no client state must be used for production access checks.
 
-Buyer: browse/search/filter/sort, compare up to three **public listings**, open details, configure a budget and conditions, choose semi-automated or automated mode and select an agreement or failed scenario. Advance alternating Buyer Agent and Seller Agent turns manually. A round contains a buyer offer and seller response; buyer acceptance of the final counteroffer does not consume another round. Semi-automated sessions require approval; automated eligible agreements close automatically. Reject or cancel without creating a deal. Successful deals update stock, notify both parties and support local ratings and browser print-to-PDF.
+Buyer: browse/search/filter/sort, add 2 to 5 listings to a multi-seller negotiation (see `docs/MULTI_SELLER.md`), open details, configure a budget and conditions, choose semi-automated or automated mode and select an agreement or failed scenario. Advance alternating Buyer Agent and Seller Agent turns manually. A round contains a buyer offer and seller response; buyer acceptance of the final counteroffer does not consume another round. Semi-automated sessions require approval; automated eligible agreements close automatically. Reject or cancel without creating a deal. Successful deals update stock, notify both parties and support local ratings and browser print-to-PDF.
 
 Seller: add/edit public listing data and stock, configure confidential floor, discount, auto-accept threshold and maximum rounds. Rules are validated and used only by the deterministic UI simulation, not a production strategy. Disabled agents fail a simulation. Session pricing strategy and round allowance are snapshotted at the first turn. Tightening the effective floor or changing the listing price stops an active simulation rather than generating invalid or non-monotonic offers; disabling the agent or losing stock also stops it. Stock and boundaries are rechecked at approval. Monitor own product sessions and sales. The documented flow requires buyer final approval in semi-automated mode, so an additional seller approval is not invented.
 
@@ -63,7 +63,7 @@ The existing `getProducts`, seller/buyer/admin dashboard calls retain URLs and `
 | Administration | authorized moderation, suspension, permission policy, reports and monitoring endpoints |
 | Marketplace growth | backend search, sorting and pagination; current search covers the loaded list only |
 
-The current API has one seller listing and one optional image per product. Multiple offers for one item, structured condition, seller public profile and warranty/delivery availability are not supplied. The comparison interface therefore compares public products, not fabricated competing offers. Images use their provided public URL and fall back on absence/error; `/media` must be accessible from the frontend origin.
+The current API has one seller listing and one optional image per product. Structured condition, seller public profile and warranty/delivery availability are not supplied. Multi-seller negotiation compares different listings through the buyer's ranking and budget (a utility score), not fabricated competing offers for the same item. Multi-seller requests are coordinated by FastAPI and have no Mock-mode fallback. Images use their provided public URL and fall back on absence/error; `/media` must be accessible from the frontend origin.
 
 Known pre-existing backend contract mismatches: buyer dashboard references `agreed_conditions`, confirmation fields and `created_at` absent from the Deal model (`final_conditions`, `closed_at`); admin audit uses `timestamp` while its model defines `created_at`. The real dashboard endpoints also need authentication/ownership checks. No backend file was changed by this frontend task.
 

@@ -94,6 +94,16 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Cause:** Nginx was the public-facing reverse proxy and had a Podman dependency on Next.js.
 - **Fix:** Start the updated Next.js container first, then recreate Nginx. Verify the deployment using `curl -k -I https://127.0.0.1`, which returned `HTTP/2 200`. The updated frontend image was confirmed to be running.
 
+### 29. `autoneg-fastapi` cannot be removed because of old renamed containers
+- **Problem:** After removing `autoneg-nginx` and `autoneg-nextjs`, `podman rm -f autoneg-fastapi` still failed with `has dependent containers which must be removed before it: 0658c2b..., ae82141...`.
+- **Cause:** The original Next.js and Nginx containers had been renamed to `autoneg-nextjs-quarantine` and `autoneg-nginx-backup` instead of being removed. They were stopped, so they did not appear in `podman ps`, but they still depended on `autoneg-fastapi`.
+- **Fix:** Find them with `podman ps -a --format '{{.ID}}  {{.Names}}' | grep <id>` and remove them with `podman rm` (without `-f`, so it refuses a running container). They held no data: the database and media live in volumes, and the nginx config comes from the repository. Do not rename project containers; remove them instead.
+
+### 30. `podman rm` with two dependent containers removes only one
+- **Problem:** `podman rm autoneg-nextjs-quarantine autoneg-nginx-backup` removed `autoneg-nginx-backup` but failed on `autoneg-nextjs-quarantine` with `has dependent containers`.
+- **Cause:** Podman processes the names in order. When it reached the first one, the second still depended on it.
+- **Fix:** Run `podman rm autoneg-nextjs-quarantine` again, or list the dependent container first.
+
 ---
 
 ## Backend
@@ -116,6 +126,11 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Problem:** Opening `.tsx` files in VS Code displayed syntax errors and missing types on all standard HTML elements (`<div>`, `<h1>`, `Link`).
 - **Cause:** The repository was freshly cloned on a Windows host without installing local dependencies, so `node_modules` and React/Next.js type declarations (`@types/react`) were missing locally.
 - **Fix:** Either run `npm install` inside `frontend/` locally to populate type definitions, or rely on containerized builds where dependencies are managed inside the container via `Containerfile`.
+
+### 31. Browser API calls fail when the frontend image runs without nginx
+- **Problem:** Running the frontend image locally with `API_INTERNAL_URL=http://<api-container>:8000`, pages rendered, but browser calls to `/api/workspace/...` returned `500` and the logs showed `ECONNREFUSED 127.0.0.1:8000`.
+- **Cause:** The `/api` rewrite in `next.config.ts` is fixed when the image is built, and `API_INTERNAL_URL` is not set at build time, so it points to `localhost:8000`. In production this does not matter because nginx sends `/api/` straight to FastAPI.
+- **Fix:** Test through nginx, or send `/api` requests straight to the API, as nginx does. Setting `API_INTERNAL_URL` when the container starts only affects server-side rendering.
 
 ### 23. Git commit fails with Author identity unknown
 - **Problem:** Running `git commit` on Windows failed with `Author identity unknown` and `fatal: unable to auto-detect email address`.
