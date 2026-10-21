@@ -227,12 +227,19 @@ export function RequestSetup({ productIds }: {
     <div>
     <h2>1. Rank the listings</h2>
     <p className="muted text-sm mt-1">Put the listing you prefer first. Your agent combines price savings with this preference ranking.</p>
-    <ol className="mt-4 space-y-2">{listings.map((p, index) => <li key={p.id} className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
-        <span className="text-sm"><strong>#{index + 1}</strong> {p.name} · {money(p.base_price)} · {state.users.find(u => u.id === p.seller_id)?.name ?? "Seller"}</span>
-        <span className="flex gap-1">
+    <ol className="mt-4 space-y-3">{listings.map((p, index) => <li key={p.id} className="flex items-start justify-between gap-4 rounded-xl border border-slate-200 p-4 bg-white">
+        <div className="space-y-1.5 flex-1 min-w-0">
+        <div className="text-sm font-semibold text-slate-900">
+            <span className="text-indigo-600 font-bold mr-2">#{index + 1}</span>
+            {p.name}
+            <span className="ml-2 font-normal text-slate-500">· {money(p.base_price)} · {state.users.find(u => u.id === p.seller_id)?.name ?? "Seller"}</span>
+        </div>
+        {p.description && <p className="text-xs text-slate-600 leading-relaxed whitespace-pre-wrap"><strong className="text-slate-700">Specs & Condition:</strong> {p.description}</p>}
+        </div>
+        <div className="flex gap-1 shrink-0 pt-0.5">
         <button type="button" className="btn-secondary" aria-label={`Move ${p.name} up`} disabled={index === 0} onClick={() => move(index, -1)}>↑</button>
         <button type="button" className="btn-secondary" aria-label={`Move ${p.name} down`} disabled={index === listings.length - 1} onClick={() => move(index, 1)}>↓</button>
-        </span>
+        </div>
         </li>)}</ol>
     </div>
     <div className="field-grid">
@@ -325,7 +332,11 @@ export function RequestDetail({ id }: {
         const leveraged = s.rounds.some(t => t.leverageApplied);
         return <tr key={s.id} className={s.id === chosen?.id || (request.status === "awaiting_approval" && s.id === selected?.id) ? "bg-emerald-50" : ""}>
         <td>#{request.productIds.indexOf(s.productId) + 1}</td>
-        <td><Link className="text-indigo-600" href={`/dashboard/${user.role}/negotiations/${s.id}`}>{p?.name ?? "Listing"}</Link><br /><span className="muted text-xs">Listed {p ? money(p.base_price) : "-"}</span></td>
+        <td className="max-w-md">
+            <Link className="text-indigo-600 font-semibold" href={`/dashboard/${user.role}/negotiations/${s.id}`}>{p?.name ?? "Listing"}</Link>
+            <div className="muted text-xs mt-0.5">Listed {p ? money(p.base_price) : "-"}</div>
+            {p?.description && <div className="text-xs text-slate-600 mt-1.5 whitespace-pre-wrap leading-relaxed border-t border-slate-100 pt-1"><strong className="text-slate-700">Condition & Specs:</strong> {p.description}</div>}
+        </td>
         <td>{state.users.find(u => u.id === p?.seller_id)?.name ?? "Seller"}</td>
         <td>{buyerTurn ? money(buyerTurn.price) : "-"}</td>
         <td>{sellerTurn ? <><span>{money(sellerTurn.price)}{sellerTurn.action === "accept" ? " ✓" : ""}</span>{leveraged && <span className="block text-xs text-emerald-700 font-semibold">↓ Leverage applied</span>}</> : "-"}</td>
