@@ -1,4 +1,3 @@
-
 # AutoNegotiater — Problems Log
 
 A shared log of the problems we ran into and how we fixed them. Add new entries under the matching section, using the same format:
@@ -118,6 +117,11 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Cause:** The `alembic` command does not add the project folder to `sys.path`.
 - **Fix:** Add `prepend_sys_path = .` to `alembic.ini`.
 
+### 32. Database seeding skipped on running server
+- **Problem:** Multi-seller listings for iPhone 15 Pro, PS5, and S24 did not appear after updating `seed.py`.
+- **Cause:** `seed.py` skips execution when users already exist in the database.
+- **Fix:** Added automatic synchronization in `ensure_initial_workspace_data` (`workspace.py`) to insert missing listings and rules on startup.
+
 ---
 
 ## Frontend
@@ -141,6 +145,21 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Problem:** Running `git add frontend/` displayed multiple warnings: `LF will be replaced by CRLF the next time Git touches it`.
 - **Cause:** Git detected differences between Unix (LF) and Windows (CRLF) line-ending conventions.
 - **Fix:** Treat these messages as line-ending warnings rather than commit errors. The files were staged and committed successfully without changing the application code.
+
+### 33. Multi-seller selection pulled in unrelated products
+- **Problem:** Starting a multi-seller negotiation for iPhone 15 Pro selected 5 listings, mixing in Samsung Galaxy phones.
+- **Cause:** The competitor query fell back to the entire `Electronics` category to fill 4 slots.
+- **Fix:** Restricted competitor selection in `products.tsx` to match only the specific product model when competing listings exist.
+
+### 34. Product condition notes hidden in negotiation views
+- **Problem:** Buyers could not compare device condition or specs during listing ranking or inside the request overview table.
+- **Cause:** `RequestSetup` and `RequestDetail` in `negotiation.tsx` displayed only the listing title and price.
+- **Fix:** Added condition and specification snippets (`p.description`) to the ranking cards and the seller offers table.
+
+### 35. Mock test data missing multi-seller products
+- **Problem:** Offline test suites and mock mode did not reflect the new multi-seller variants.
+- **Cause:** `mock-data.ts` only had single-seller items.
+- **Fix:** Added matching multi-seller products to `mock-data.ts` while preserving legacy IDs for existing tests.
 
 ---
 
