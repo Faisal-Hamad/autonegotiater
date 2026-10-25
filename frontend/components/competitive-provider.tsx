@@ -1,0 +1,58 @@
+"use client";
+import { RealCompetitiveProvider } from "./real-workspace-provider";
+import {createContext,useContext,useCallback,useEffect,type ReactNode} from "react";
+import {useDemo} from "./demo-provider";
+import {useLocalDemoState} from "./local-demo-state";
+import {safeTree} from "@/lib/demo-storage";
+import {emptyIntegration,materializeListingCatalog,transition,validateIntegration,configuredListings,unifiedSessions,ownedAttempt,attemptStatus,type IntegrationState,type IntegrationAction,type DemoAgreement,type SessionRead} from "@/lib/demo-integration";
+import {competitiveView,sellerCompetitiveViews,inventoryFor,type CompetitiveView,type SellerCompetitiveSession,type Inventory,type Requirements} from "@/lib/competitive";
+import type {Product} from "@/lib/api";
+export type OperationalSession=SessionRead & {product:Product;quantity:number;targetPrice:number;deliveryDays:number;maxRounds:number;phase:string;paused:boolean;updatedAt:string;decisionAt?:string;participants:{id:string;sellerId:number;name:string;productId?:number;productName?:string;description?:string;catalogId?:string;startingPrice:number;currentPrice?:number;agreedPrice?:number;stock:number;deliveryDays:number;status:string;history:SellerCompetitiveSession["history"]}[]};
+type BuyerAttempt=CompetitiveView & {attemptId:string;paused:boolean;createdAt:string;decisionAt?:string};
+type Context={sessions:Record<number,BuyerAttempt>;sellerSessions:SellerCompetitiveSession[];records:OperationalSession[];history:SessionRead[];agreements:DemoAgreement[];notices:IntegrationState["notices"];audit:IntegrationState["audit"];settings:{product:Product;listing:Inventory}[];reportListings:{productId:number;catalogId?:string;productName:string;sellerId:number;storefrontKey:string;storefrontName:string;price:number;stock:number;deliveryDays:number}[];publicListings:(product:Product,r:Requirements)=>CompetitiveView["sellers"];start:(productId:number,r:Requirements)=>void|Promise<void>;advance:(productId:number,id?:string)=>void;approve:(productId:number,sellerId:string,id?:string)=>void;restart:(productId:number,id?:string)=>void;decision:(id:string,type:"cancel"|"reject"|"pause"|"resume")=>void;read:(id?:string)=>void;createListing:(productId:number,listing:Inventory)=>void|Promise<void>;saveListing:(productId:number,listing:Inventory,storefrontName?:string)=>void|Promise<void>;savePrimary:(product:Product,rule:{minimum:number;discount:number;enabled:boolean;rounds:number})=>void;findBuyer:(id:string)=>BuyerAttempt|null;reset:()=>void};
+export type CompetitiveContext = Context;
+export const CompetitiveContextProvider=createContext<Context|null>(null);
+const Context=CompetitiveContextProvider;
+const valid=(v:unknown):v is IntegrationState=>safeTree(v)&&validateIntegration(v);
+export function CompetitiveProvider({children}:{children:ReactNode}){
+    if(process.env.NEXT_PUBLIC_AUTONEG_REAL_MODE === "true")return <RealCompetitiveProvider>{children}</RealCompetitiveProvider>;
+    return <LocalCompetitiveProvider>{children}</LocalCompetitiveProvider>;
+}
+function LocalCompetitiveProvider({children}:{children:ReactNode}){
+    const {enabled,user,state,notify}=useDemo();
+    const [store,setStore,ready,warning]=useLocalDemoState("autonegotiater-integration",emptyIntegration,valid,enabled);
+    useEffect(()=>{if(enabled&&ready)setStore(s=>materializeListingCatalog(s,state.products));},[enabled,ready,state.products,setStore]);
+    const dispatch=useCallback((action:IntegrationAction)=>{if(enabled)setStore(s=>transition(s,user,action,new Date().toISOString()));},[enabled,user,setStore]);
+    const sellerLabel=(owner:number,id:string)=>`${state.users.find(u=>u.id===owner)?.name??`Seller #${owner}`} · Listing ${id}`;
+    const labelBuyer=(v:CompetitiveView,a:IntegrationState["attempts"][number])=>({...v,sellers:v.sellers.map(s=>({...s,name:sellerLabel(a.engine.sellers.find(x=>x.inventory.id===s.id)!.sellerAccountId,s.id)}))});
+    const viewBuyer=(id:string):BuyerAttempt|null=>{const a=store.attempts.find(a=>a.id===id);if(!a||!enabled||!user.active||user.role!=="buyer")return null;const v=competitiveView(a.engine,user.id);return v?{...labelBuyer(v,a),attemptId:a.id,paused:a.paused,createdAt:a.createdAt,decisionAt:a.decisionAt}:null;};
+    const sessions:Record<number,BuyerAttempt>={};
+    if(enabled&&user.active&&user.role==="buyer")for(const a of [...store.attempts].reverse()){if(a.archived)continue;const v=viewBuyer(a.id);if(v)sessions[v.productId]=v;}
+    const sellerSessions=enabled&&user.active&&user.role==="seller"?store.attempts.flatMap(a=>sellerCompetitiveViews(a.engine,user.id).map(s=>({...s,storefrontName:sellerLabel(user.id,s.storefrontId),id:`${a.id}--${s.storefrontId}`}))):[];
+    const records:OperationalSession[]=!enabled?[]:store.attempts.filter(a=>ownedAttempt(a,user)).map(a=>({id:a.id,type:"multi-seller",productName:a.engine.productName,buyerId:a.engine.buyerId,sellerIds:user.role==="seller"?[user.id]:[...new Set(a.engine.sellers.map(s=>s.sellerAccountId))],status:attemptStatus(a,user),round:a.engine.round,createdAt:a.createdAt,href:`/dashboard/${user.role}/${user.role==="seller"?"competitive-session":"competitive"}/${a.id}`,product:a.product,quantity:a.engine.requirements.quantity,targetPrice:a.engine.requirements.targetPrice,deliveryDays:a.engine.requirements.deliveryDays,maxRounds:a.engine.requirements.maxRounds,phase:a.engine.phase,paused:a.paused,updatedAt:a.updatedAt,decisionAt:a.decisionAt,participants:a.engine.sellers.filter(s=>user.role!=="seller"||s.sellerAccountId===user.id&&s.inventory.ownerSellerId===user.id).map(s=>({id:s.inventory.id,sellerId:s.sellerAccountId,name:sellerLabel(s.sellerAccountId,s.inventory.id),startingPrice:s.inventory.startingPrice,currentPrice:s.currentPrice,agreedPrice:s.agreedPrice,stock:s.inventory.stock,deliveryDays:s.inventory.deliveryDays,status:s.status,history:structuredClone(s.history)}))}));
+    const agreements=enabled&&user.active?store.agreements.map(g=>({...g,storefrontName:sellerLabel(g.sellerId,g.listingId??store.attempts.find(a=>a.id===g.sessionId)?.engine.approvedSellerId??g.storefrontId)})).filter(g=>user.role==="admin"||user.role==="buyer"&&g.buyerId===user.id||user.role==="seller"&&g.sellerId===user.id):[];
+    const settings=enabled&&user.active&&user.role==="seller"?state.products.flatMap(product=>configuredListings(store,product,state.users).filter(i=>i.ownerSellerId===user.id).map(listing=>({product,listing}))):[];
+    const activeId=(productId:number,id?:string)=>id??sessions[productId]?.attemptId??"";
+    const publicListings=(product:Product,r:Requirements)=>configuredListings(store,product,state.users).map(i=>({id:i.id,name:sellerLabel(i.ownerSellerId,i.id),catalogId:i.productKey,exactProduct:true,startingPrice:i.startingPrice,stock:i.stock,deliveryDays:i.deliveryDays,participates:i.enabled!==false&&i.stock>=r.quantity&&i.deliveryDays<=r.deliveryDays,status: i.enabled===false||i.stock<r.quantity||i.deliveryDays>r.deliveryDays?"excluded" as const:"ready" as const,reason:i.enabled===false?"Seller Agent disabled":i.stock<r.quantity?"Insufficient stock":i.deliveryDays>r.deliveryDays?"Delivery exceeds deadline":"Ready",history:[]}));
+    const reportListings=user.active&&user.role==="admin"?state.products.flatMap(product=>configuredListings(store,product,state.users).map(i=>({productId:product.id,productName:product.name,sellerId:i.ownerSellerId,storefrontKey:i.id,storefrontName:sellerLabel(i.ownerSellerId,i.id),price:i.startingPrice,stock:i.stock,deliveryDays:i.deliveryDays}))):[];
+    const value:Context={reportListings,sessions,sellerSessions,records,agreements,settings,history:unifiedSessions(state,store.attempts,user),notices:enabled?store.notices.filter(n=>n.userId===user.id).map(n=>({...n,text:n.text.replace(/storefront/gi,"product listing")})):[],audit:user.active&&user.role==="admin"?store.audit:[],publicListings,
+        start:(productId,r)=>{const product=state.products.find(p=>p.id===productId);if(!product||!user.active||user.role!=="buyer")throw new Error("Choose an active Buyer identity.");dispatch({type:"start",product,requirements:r,listings:configuredListings(store,product,state.users)});},
+        advance:(p,id)=>dispatch({type:"step",id:activeId(p,id)}),approve:(p,sellerId,id)=>dispatch({type:"approve",id:activeId(p,id),sellerId}),restart:(p,id)=>{const a=store.attempts.find(a=>a.id===activeId(p,id));if(!a)return;if(["active","paused","awaiting_approval"].includes(attemptStatus(a))){notify("Cancel or finalize this attempt before starting another. History is retained.");return;}dispatch({type:"archive",id:a.id});},
+        decision:(id,type)=>dispatch({type,id}),read:(id)=>dispatch({type:"read",id}),
+        createListing:(productId,listing)=>{const p=state.products.find(p=>p.id===productId);if(!p||user.role!=="seller"||!user.active||listing.ownerSellerId!==user.id||listing.productKey!==inventoryFor(p)[0].productKey)throw new Error("Choose an exact catalog product and your own Seller identity.");dispatch({type:"listing_create",productId,listing});},
+        saveListing:(productId,listing,storefrontName)=>{const p=state.products.find(p=>p.id===productId);const base=p&&configuredListings(store,p,state.users).find(i=>i.id===listing.id);if(!base||base.ownerSellerId!==user.id||listing.ownerSellerId!==user.id||base.storefrontKey!==listing.storefrontKey||base.productKey!==listing.productKey)throw new Error("This listing is not owned by the selected Seller.");dispatch({type:"settings",productId,listing,storefrontName:base.name});},
+        savePrimary:(product,rule)=>{const base=inventoryFor(product).find(i=>i.id==="riyadh"||i.id===`p${product.id}-listing`);if(base&&base.ownerSellerId===user.id)dispatch({type:"settings",productId:product.id,listing:{...base,...store.settings[`${product.id}:${base.id}`],startingPrice:Number(product.base_price),stock:product.stock_quantity,declaredMinimumPrice:rule.minimum,maximumDiscount:rule.discount,minimumPrice:Math.max(rule.minimum,Math.ceil(Number(product.base_price)*(1-rule.discount/100)*100-1e-7)/100),enabled:rule.enabled,maxRounds:Math.min(rule.rounds,12)},storefrontName:store.storefrontNames[base.storefrontKey]??base.name});},findBuyer:viewBuyer,
+        reset:()=>{if(window.confirm("Reset all browser-local demo data and identities? This cannot be undone.")){for(const key of ["autonegotiater-legacy","autonegotiater-identity","autonegotiater-integration"])localStorage.removeItem(key);location.assign("/");}}
+    };
+    if(!ready)return <div className="panel" role="status">Restoring negotiation records…</div>;
+    return <Context.Provider value={value}>{warning&&<p role="status" className="demo-strip">{warning}</p>}{children}</Context.Provider>;
+}
+export function useCompetitiveWorkspace(){const c=useContext(Context);if(!c)throw new Error("CompetitiveProvider missing");return c;}
+export function useCompetitive(productId:number,attemptId?:string){
+    const c=useCompetitiveWorkspace();
+    const advance=useCallback(()=>c.advance(productId,attemptId),[c.advance,productId,attemptId]);
+    const approve=useCallback((id:string)=>c.approve(productId,id,attemptId),[c.approve,productId,attemptId]);
+    const restart=useCallback(()=>c.restart(productId,attemptId),[c.restart,productId,attemptId]);
+    return {session:attemptId?c.findBuyer(attemptId):c.sessions[productId]??null,start:c.start,advance,approve,restart,publicListings:c.publicListings};
+}
+export function useSellerCompetitive(){return useCompetitiveWorkspace().sellerSessions;}

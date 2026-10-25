@@ -7,3 +7,29 @@ __pycache__/
 .venv/
 *.tsbuildinfo
 next-env.d.ts
+
+# Publication safety: local secrets and generated outputs
+.env.*
+!.env.example
+!**/.env.example
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+.next*/
+.verification/
+checkpoints/
+backups/
+*.dump
+*.backup
+*.zip
+*.tar
+*.tar.gz
+*.log
+.pytest_cache/
+
+# Package-manager caches are never source
+.npm-cache/
+.cache/
+.turbo/
+.pnpm-store/

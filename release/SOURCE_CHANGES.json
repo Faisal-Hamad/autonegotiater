@@ -1,0 +1,178 @@
+{
+  "comparison": "candidate frontend versus unchanged local demo",
+  "frontend": [
+    {
+      "file": "frontend/app/health/frontend/route.ts",
+      "change": "added",
+      "sha256": "e81c1dccc1715cea42cc9d89d1d90a6d8bf3aacca04004576f0c6f325803c1db"
+    },
+    {
+      "file": "frontend/app/page.tsx",
+      "change": "modified",
+      "sha256": "7c0ad41955110744741617ed852d3b1568aeddaf99f26f58caaf925e90c7e23e"
+    },
+    {
+      "file": "frontend/app/products/[id]/competitive/page.tsx",
+      "change": "modified",
+      "sha256": "2af6ef972d5ab5a7e0b90043d8cc08c766cdc4a853df85ad7a4c24777e144588"
+    },
+    {
+      "file": "frontend/components/admin-reports.tsx",
+      "change": "modified",
+      "sha256": "a397b4fb6be8628df403b42705d7c00ad06351a36322c6a56b9458902daff30d"
+    },
+    {
+      "file": "frontend/components/agreement-links.tsx",
+      "change": "modified",
+      "sha256": "db675a4df6e79d5cb9226de75dd2bb5c8f026c0fd7ef04de7722e0584cb0ed73"
+    },
+    {
+      "file": "frontend/components/approved-visuals.tsx",
+      "change": "modified",
+      "sha256": "830f91e49df952add28b3cf1f0c791c1c46cdbb35e9d4ac2fbea71f2c107d4ad"
+    },
+    {
+      "file": "frontend/components/competitive-negotiation.tsx",
+      "change": "modified",
+      "sha256": "0c040b1bb31b9938396edf80ca97bacfd06625c175c5462b7ac7086c2c042346"
+    },
+    {
+      "file": "frontend/components/competitive-provider.tsx",
+      "change": "modified",
+      "sha256": "d5b767e218f5bac493ed9de20451bb8fcae8735ecc70c303655834a4923f44c9"
+    },
+    {
+      "file": "frontend/components/demo-pages.tsx",
+      "change": "modified",
+      "sha256": "84e2cc126c7669cdd40f679afeeec7c579474d0695b49a10ae53da4702b34346"
+    },
+    {
+      "file": "frontend/components/demo-provider.tsx",
+      "change": "modified",
+      "sha256": "f656d3fe0add37f33b700429861b2e8df1e3dde5c4c510a05b80233c6babee17"
+    },
+    {
+      "file": "frontend/components/negotiation.tsx",
+      "change": "modified",
+      "sha256": "e88b258d78c2216fe5ef53509c625953deb1b01933b966fa68493eec6cf69290"
+    },
+    {
+      "file": "frontend/components/products.tsx",
+      "change": "modified",
+      "sha256": "e356dd8d3692f14f381278e0d4e399a6967b87a6740a7375b6394755855eff1c"
+    },
+    {
+      "file": "frontend/components/real-account.tsx",
+      "change": "added",
+      "sha256": "367028074dd090fa950807628815b475feb8aad9d334fb4cc8fc6f9afb030100"
+    },
+    {
+      "file": "frontend/components/real-workspace-provider.tsx",
+      "change": "added",
+      "sha256": "d1c7859e79db014f430121e5ee232a6195ddd1d308b15379e945d763143cb3b8"
+    },
+    {
+      "file": "frontend/components/seller-competitive.tsx",
+      "change": "modified",
+      "sha256": "fc8bee89108efba5da06fdd65c8b0d104cb4c6478d200426e1afe0a16cb58b93"
+    },
+    {
+      "file": "frontend/components/seller-session-view.tsx",
+      "change": "modified",
+      "sha256": "c58b0d269cf0b9e0b1d765be85c662773097c6be9b69287faa56b7f8f4d5eb61"
+    },
+    {
+      "file": "frontend/components/site-shell.tsx",
+      "change": "modified",
+      "sha256": "b9e395abcd2da81f01d14d1ffd0d6ef09a8261ac8002735e7cc270aa79d68982"
+    },
+    {
+      "file": "frontend/components/storefront-manager.tsx",
+      "change": "modified",
+      "sha256": "967f19bad8ad4f0cd2f6544b18450d4170136df2c2c4f7a172629b6dda79e2d1"
+    },
+    {
+      "file": "frontend/components/unified-workspace.tsx",
+      "change": "modified",
+      "sha256": "33239c63552a8f3b983264dfee701b162fb79312b187df8b7e806017d007c9a8"
+    },
+    {
+      "file": "frontend/lib/api.ts",
+      "change": "modified",
+      "sha256": "7441b77759ffb495393de4c5b2d86149e801f36b7de0d6ebdd95dc99572a1552"
+    },
+    {
+      "file": "frontend/lib/competitive.ts",
+      "change": "modified",
+      "sha256": "6774fe8bc000efb97c7932a5ab6d433fd20816446fea3306591acbcd5ce0052b"
+    },
+    {
+      "file": "frontend/lib/demo-integration.ts",
+      "change": "modified",
+      "sha256": "34345a04107a7d8c0b11610d33e205d874d854a80df100fdd546cc991d69de7d"
+    },
+    {
+      "file": "frontend/lib/integrated-reports.ts",
+      "change": "modified",
+      "sha256": "ff6fdae9669a14d30bd88cf66e6b136483f28c8283fdc852f998814cecbe88f3"
+    },
+    {
+      "file": "frontend/lib/real-api.ts",
+      "change": "added",
+      "sha256": "243f407609f99b27bded17dbe814ae9a0c3ea28291273314fa5150b74c123bc4"
+    },
+    {
+      "file": "frontend/lib/report-download.ts",
+      "change": "modified",
+      "sha256": "9356ccfdf9e3fd9eaf40015e9c7db844f7f2aed25ac9782339086ad3b73cd72f"
+    },
+    {
+      "file": "frontend/lib/reports.ts",
+      "change": "modified",
+      "sha256": "a0ad88cf24daa4e302ed1a0c2eebaa40a13522540869f285e4a15db452f4a61d"
+    },
+    {
+      "file": "frontend/lib/text-report-pdf.ts",
+      "change": "modified",
+      "sha256": "87e48ec8b93decaf0ae016694543e7cddb87cc5170ccc4076fff9cb0db1bea42"
+    },
+    {
+      "file": "frontend/next.config.ts",
+      "change": "modified",
+      "sha256": "085d47d6761bf94aa30b7e7a59465c6124bd3a8db72f8e29d25168af9a0d3b5f"
+    },
+    {
+      "file": "frontend/package-lock.json",
+      "change": "modified",
+      "sha256": "177bda15eb7383aa7939a24e9bab273ed14d4848565ee9b3310dce7c9ac639f5"
+    },
+    {
+      "file": "frontend/package.json",
+      "change": "modified",
+      "sha256": "d6b77d0b11bea251306868264d56c0250149fca226d8e6550933a40b9ef4dd7d"
+    },
+    {
+      "file": "frontend/tests/verify-real-reports.cjs",
+      "change": "added",
+      "sha256": "587ff5d962a09cda2274a7c6beaf821ddfd56247bba0f969544756eae2d6d6ed"
+    }
+  ],
+  "backend_modified": [
+    "backend/app/config.py",
+    "backend/app/main.py",
+    "backend/app/routers/workspace.py"
+  ],
+  "backend_added": [
+    "backend/app/competitive_engine.py",
+    "backend/app/integration_auth.py",
+    "backend/app/routers/integration.py",
+    "backend/alembic/versions/0003_authenticated_integration.py",
+    "backend/tests/test_competitive_engine.py",
+    "backend/tests/integration_smoke.py",
+    "backend/app/product_identity.py",
+    "backend/tests/test_product_identity.py",
+    "backend/tests/model_matching_smoke.py"
+  ],
+  "deletions_performed": [],
+  "current_release": "frontend-r7/backend-r5; model-storage-v1"
+}

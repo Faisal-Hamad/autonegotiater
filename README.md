@@ -33,7 +33,7 @@ Backend (needs a local PostgreSQL and Redis, or run the whole stack with compose
 cd backend
 python -m venv .venv && . .venv/bin/activate
 pip install -r requirements.txt
-export DATABASE_URL=postgresql+asyncpg://autoneg:autoneg@localhost:5432/autoneg
+export DATABASE_URL=postgresql+asyncpg://<DB_USER>:<DB_PASSWORD>@localhost:5432/autoneg
 alembic upgrade head
 python seed.py
 uvicorn app.main:app --reload           # http://localhost:8000/docs
@@ -66,3 +66,12 @@ podman exec -it autoneg-postgresql psql -U autoneg autoneg           # SQL shell
 | `buyer1@demo.autonegotiater.com`, `buyer2@…` | buyer |
 
 Password for all demo accounts: `Demo@1234`
+
+
+## Current integrated frontend (26 October 2026)
+
+The root `frontend/` now contains the approved authenticated Buyer/Seller/Admin interface and production integration. The original mock-only prototype is preserved in `demos/autonegotiater-multi-seller-demo/frontend/`. Do not deploy the isolated demo to production.
+
+See [publication checks and collaboration notes](docs/releases/GITHUB_PUBLICATION_20261026.md), [deployed model matching](docs/releases/MODEL_MATCHING_RELEASE_20261025.md), and [production frontend notes](frontend/PRODUCTION_INTEGRATION.md). The seven backend integration reports are included at repository root; their older audit findings have dated links to the newer release evidence.
+
+The existing GitHub workflow still deploys automatically on ordinary pushes to main. This source-publication commit uses `[skip ci]` to preserve the running production release. Coordinate the deployment workflow before later pushes; external hooks were not inspectable with the current account. Pull before editing and never force-push shared history.

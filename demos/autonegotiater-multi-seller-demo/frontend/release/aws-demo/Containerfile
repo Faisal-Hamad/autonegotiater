@@ -1,0 +1,31 @@
+# ISOLATED DEMO ONLY. No production API/DB configuration or environment files.
+FROM docker.io/library/node:22-alpine AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --include=dev
+
+FROM docker.io/library/node:22-alpine AS build
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+# Required: the old Containerfile omitted these manifests from the build stage.
+COPY --from=deps /app/package.json /app/package-lock.json ./
+COPY app ./app
+COPY components ./components
+COPY lib ./lib
+COPY public ./public
+COPY next.config.ts tsconfig.json next-env.d.ts postcss.config.mjs ./
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 AUTONEG_ISOLATED_DEMO_BUILD=true USE_MOCK_DATA=true
+RUN npm run build
+
+FROM docker.io/library/node:22-alpine AS runtime
+WORKDIR /app
+ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 USE_MOCK_DATA=true HOSTNAME=0.0.0.0 PORT=3000
+COPY --from=build --chown=node:node /app/.next/standalone ./
+COPY --from=build --chown=node:node /app/.next/static ./.next/static
+COPY --from=build --chown=node:node /app/public ./public
+COPY --chown=node:node demo-network-guard.cjs ./demo-network-guard.cjs
+USER node
+EXPOSE 3000
+# This separate health process can reach only the local listener; it never probes DB.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 CMD node -e "fetch('http://127.0.0.1:3000/api/health').then(async r=>{const h=await r.json();if(!r.ok||h.mode!=='demo'||!h.mock||h.backendConnected)process.exit(1)}).catch(()=>process.exit(1))"
+CMD ["node", "--require", "./demo-network-guard.cjs", "server.js"]

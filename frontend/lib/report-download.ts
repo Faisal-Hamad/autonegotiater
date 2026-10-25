@@ -1,3 +1,4 @@
+import { textReportPdf } from "./text-report-pdf";
 import type { Report } from "./reports";
 
 export function downloadFile(data: Blob, name: string) {
@@ -6,9 +7,10 @@ export function downloadFile(data: Blob, name: string) {
     anchor.href = url; anchor.download = name; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
 }
-// Native canvas renders English text before embedding each page as a JPEG.
-// Image PDF deliberately avoids font packages; CSV is the searchable text alternative.
+// Searchable WinAnsi text is used when supported; canvas preserves unsupported scripts.
+// Built-in PDF fonts avoid packages; canvas fallback preserves unsupported scripts.
 export async function reportPdf(report: Report): Promise<Blob> {
+    const searchable=textReportPdf(report);if(searchable)return searchable;
     await document.fonts.ready;
     const canvas = document.createElement("canvas"); canvas.width = 1240; canvas.height = 1754;
     const ctx = canvas.getContext("2d"); if (!ctx) throw new Error("Unable to create a PDF in this browser.");
@@ -16,11 +18,11 @@ export async function reportPdf(report: Report): Promise<Blob> {
     function start() {
         ctx!.fillStyle = "white"; ctx!.fillRect(0, 0, 1240, 1754);
         ctx!.fillStyle = "#334155"; ctx!.direction = "ltr"; ctx!.textAlign = "left";
-        ctx!.font = "24px Arial"; ctx!.fillText("AutoNegotiater | DEMO / SAMPLE DATA", 70, 65);
+        ctx!.font = "24px Arial"; ctx!.fillText("AutoNegotiater | SERVER RECORDS", 70, 65);
         ctx!.font = "18px Arial"; ctx!.fillText(`${report.id} | ${report.generatedAt}`, 70, 103); y = 155;
     }
     function save() {
-        ctx!.font = "20px Arial"; ctx!.fillText(`Page ${pages.length + 1} — DEMO / SAMPLE DATA`, 70, 1700);
+        ctx!.font = "20px Arial"; ctx!.fillText(`Page ${pages.length + 1} — SERVER RECORDS`, 70, 1700);
         const raw = atob(canvas.toDataURL("image/jpeg", .94).split(",")[1]); pages.push(Uint8Array.from(raw, c => c.charCodeAt(0)));
     }
     function line(text: string, heading = false) {

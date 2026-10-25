@@ -21,11 +21,6 @@ export type Round = {
     action: "offer" | "counteroffer" | "accept";
     price: number;
     message: string;
-    // Buyer-side value of this offer (0-1) in a multi-seller request. Buyer-only.
-    utility?: number;
-    competingOffer?: number;
-    leverageApplied?: boolean;
-    scheduledPrice?: number;
 };
 export type Session = {
     id: number;
@@ -33,13 +28,10 @@ export type Session = {
     productId: number;
     budget: number;
     mode: "semi_automated" | "automated";
-    status: "active" | "awaiting_approval" | "completed" | "failed" | "cancelled" | "rejected" | "not_selected";
+    status: "active" | "awaiting_approval" | "completed" | "failed" | "cancelled" | "rejected";
     scenario: "agreement" | "failed" | "rejection" | "cancellation";
-    // Set when this session is one of the sellers in a multi-seller request.
-    requestId?: number;
     agreedPrice?: number;
     failureReason?: string;
-    maxRounds?: number;
     // Engine-only snapshots. Never passed to a role-specific view.
     privateLimits?: {
         asking: number;
@@ -67,20 +59,6 @@ export type Deal = {
     rating?: number;
     feedback?: string;
 };
-// One buyer, many sellers: one session per selected listing.
-export type BuyerRequest = {
-    id: number;
-    buyerId: number;
-    budget: number;
-    mode: "semi_automated" | "automated";
-    status: "active" | "awaiting_approval" | "completed" | "failed" | "cancelled";
-    priceWeight: number;
-    productIds: number[]; // most preferred first
-    sessionIds: number[];
-    warranty: number;
-    delivery: string;
-    createdAt: string;
-};
 export type Notice = {
     id: number;
     userId: number;
@@ -99,7 +77,6 @@ export type DemoState = {
     users: DemoUser[];
     rules: Rule[];
     sessions: Session[];
-    requests?: BuyerRequest[];
     deals: Deal[];
     notices: Notice[];
     audit: Audit[];
@@ -108,12 +85,8 @@ export type SessionView = Omit<Session, "budget" | "privateLimits"> & {
     budget?: number;
     maxRounds: number;
 };
-export type RequestView = Omit<BuyerRequest, "budget"> & {
-    budget?: number;
-};
-export type DemoViewState = Omit<DemoState, "sessions" | "requests"> & {
+export type DemoViewState = Omit<DemoState, "sessions"> & {
     sessions: SessionView[];
-    requests: RequestView[];
 };
 export const demoUsers: DemoUser[] = [
     { id: 1, name: "Ahmed Alharbi", email: "seller1@demo.autonegotiater.com", role: "seller", active: true },
@@ -124,7 +97,7 @@ export const demoUsers: DemoUser[] = [
     { id: 6, name: "Demo Administrator", email: "admin@demo.autonegotiater.com", role: "admin", active: true },
 ];
 export function initialDemoState(products: Product[]): DemoState {
-    return { products: structuredClone(products), users: structuredClone(demoUsers), requests: [], rules: products.map(p => ({ productId: p.id, minimum: Number((Number(p.base_price) * .8).toFixed(2)), discount: 20, rounds: 4, threshold: Number((Number(p.base_price) * .95).toFixed(2)), enabled: true })),
+    return { products: structuredClone(products), users: structuredClone(demoUsers), rules: products.map(p => ({ productId: p.id, minimum: Number((Number(p.base_price) * .8).toFixed(2)), discount: 20, rounds: 4, threshold: Number((Number(p.base_price) * .95).toFixed(2)), enabled: true })),
         sessions: [{ id: 101, buyerId: 4, productId: 1, budget: 3500, mode: "semi_automated", status: "active", scenario: "agreement", warranty: 1, delivery: "Pickup within 3 days", rounds: [], createdAt: "2026-10-13T08:00:00Z" }, { id: 102, buyerId: 4, productId: 3, budget: 1900, mode: "semi_automated", status: "completed", scenario: "agreement", agreedPrice: 1850, warranty: 0, delivery: "Buyer pickup", rounds: [{ number: 1, agent: "buyer", action: "offer", price: 1800, message: "Opening proposal for this demo listing." }, { number: 1, agent: "seller", action: "counteroffer", price: 1850, message: "I propose a revised price for the same terms." }, { number: 1, agent: "buyer", action: "accept", price: 1850, message: "I accept the seller's counteroffer." }], createdAt: "2026-10-12T08:00:00Z" }],
         deals: [{ id: 201, sessionId: 102, productId: 3, buyerId: 4, sellerId: 2, price: 1850, listingPrice: 2200, warranty: 0, delivery: "Buyer pickup", createdAt: "2026-10-12T09:00:00Z" }],
         notices: [{ id: 1, userId: 4, text: "A demo negotiation is ready to continue.", href: "/dashboard/buyer/negotiations/101", read: false }, { id: 2, userId: 2, text: "Demo sofa agreement completed.", href: "/dashboard/seller/deals/201", read: false }], audit: [{ id: 1, action: "demo_initialized", time: "2026-10-13T08:00:00Z", reference: 101 }] };
@@ -166,7 +139,7 @@ export function negotiationRoundCount(session: Pick<Session, "rounds">) {
 export function nextAgent(session: Pick<Session, "rounds">): "buyer" | "seller" {
     return session.rounds.at(-1)?.agent === "buyer" ? "seller" : "buyer";
 }
-export function advanceSession(state: DemoState, id: number, competingOffer?: number): DemoState {
+export function advanceSession(state: DemoState, id: number): DemoState {
     const session = state.sessions.find(s => s.id === id);
     if (!session || session.status !== "active")
         return state;
@@ -193,14 +166,10 @@ export function advanceSession(state: DemoState, id: number, competingOffer?: nu
     const agent = nextAgent(session);
     const last = session.rounds.at(-1);
     const previousRound = negotiationRoundCount(session);
-    const compCents = competingOffer !== undefined ? cents(competingOffer) : undefined;
-    const opening = Math.min(limits.buyerTarget, Math.max(1, Math.floor(limits.asking * .55)));
-    const buyerScheduled = (rNum: number) => Math.floor(opening + (limits.buyerTarget - opening) * (limits.rounds === 1 ? 0 : (rNum - 1) / (limits.rounds - 1)));
     let turn: Round;
     let agreed = false;
-    const isMulti = session.requestId !== undefined;
-    const nextBuyerLimit = isMulti && previousRound + 1 <= limits.rounds ? (compCents !== undefined ? Math.min(buyerScheduled(previousRound + 1), Math.max(1, compCents - Math.max(2500, Math.floor(compCents * .02)))) : buyerScheduled(previousRound + 1)) : limits.buyerTarget;
-    if (agent === "buyer" && last?.agent === "seller" && last.action === "counteroffer" && cents(last.price) <= limits.buyerTarget && cents(last.price) <= nextBuyerLimit) {
+    if (agent === "buyer" && last?.agent === "seller" && last.action === "counteroffer" && cents(last.price) <= limits.buyerTarget) {
+        // Evaluate the public counteroffer using only the buyer's own willingness.
         turn = { number: last.number, agent, action: "accept", price: last.price, message: "I accept this counteroffer and the proposed conditions." };
         agreed = true;
     }
@@ -208,41 +177,21 @@ export function advanceSession(state: DemoState, id: number, competingOffer?: nu
         const number = previousRound + 1;
         if (number > limits.rounds)
             return fail("The maximum negotiation rounds were exhausted without agreement.");
-        const scheduled = buyerScheduled(number);
-        const prevBuyer = Math.max(0, ...session.rounds.filter(t => t.agent === "buyer").map(t => cents(t.price)));
-        if (compCents !== undefined && compCents < (last ? cents(last.price) : limits.asking)) {
-            const undercut = Math.max(2500, Math.floor(compCents * .02));
-            const price = Math.min(limits.buyerTarget, Math.max(opening, prevBuyer, Math.min(scheduled, compCents - undercut)));
-            turn = { number, agent, action: "offer", price: price / 100, competingOffer: compCents / 100, message: `Another seller in this request is offering ${(compCents / 100).toFixed(2)} SAR. I am proposing ${(price / 100).toFixed(2)} SAR — lower your price to stay competitive.` };
-        }
-        else {
-            const price = Math.max(prevBuyer, scheduled);
-            turn = { number, agent, action: "offer", price: price / 100, message: number === 1 ? "I am opening with a lower proposal for these terms." : "I can increase my previous proposal to move the discussion forward." };
-        }
+        const opening = Math.min(limits.buyerTarget, Math.max(1, Math.floor(limits.asking * .55)));
+        const progress = limits.rounds === 1 ? 0 : (number - 1) / (limits.rounds - 1);
+        const price = Math.floor(opening + (limits.buyerTarget - opening) * progress);
+        turn = { number, agent, action: "offer", price: price / 100, message: number === 1 ? "I am opening with a lower proposal for these terms." : "I can increase my previous proposal to move the discussion forward." };
     }
     else {
         const number = last!.number;
         const progress = limits.rounds === 1 ? 0 : (number - 1) / (limits.rounds - 1);
         const target = session.scenario === "failed" ? Math.max(limits.floor, Math.ceil(limits.asking * .95)) : limits.floor;
-        const prevSeller = Math.min(limits.asking, ...session.rounds.filter(t => t.agent === "seller").map(t => cents(t.price)));
-        const scheduled = Math.min(prevSeller, Math.ceil(limits.asking + (target - limits.asking) * progress));
-        let price = scheduled;
-        let leverageApplied = false;
-        if (compCents !== undefined && session.scenario !== "failed" && compCents < scheduled) {
-            const undercut = Math.max(2500, Math.floor(compCents * .02));
-            const compTarget = Math.max(limits.floor, compCents - undercut);
-            if (compTarget < scheduled) {
-                price = compTarget;
-                leverageApplied = true;
-            }
-        }
+        const price = Math.ceil(limits.asking + (target - limits.asking) * progress);
         const offer = cents(last!.price);
         agreed = offer >= price || (session.scenario !== "failed" && offer >= limits.threshold);
         turn = agreed
             ? { number, agent, action: "accept", price: last!.price, message: "I accept the buyer's proposal and the proposed conditions." }
-            : leverageApplied && compCents !== undefined
-                ? { number, agent, action: "counteroffer", price: price / 100, leverageApplied: true, competingOffer: compCents / 100, scheduledPrice: scheduled / 100, message: `To compete with the ${(compCents / 100).toFixed(2)} SAR offer from another seller, I lowered my counteroffer from ${(scheduled / 100).toFixed(2)} SAR to ${(price / 100).toFixed(2)} SAR.` }
-                : { number, agent, action: "counteroffer", price: price / 100, message: number === 1 ? "My opening counteroffer reflects the public listing price." : "I can reduce my previous counteroffer for these terms." };
+            : { number, agent, action: "counteroffer", price: price / 100, message: number === 1 ? "My opening counteroffer reflects the public listing price." : "I can reduce my previous counteroffer for these terms." };
     }
     // Recheck both private boundaries before recording an acceptance.
     if (agreed && (cents(turn.price) > budget || cents(turn.price) < Math.max(limits.floor, floor)))
@@ -251,7 +200,7 @@ export function advanceSession(state: DemoState, id: number, competingOffer?: nu
     const updated: Session = { ...session, privateLimits: limits, rounds: [...session.rounds, turn], status: agreed ? "awaiting_approval" : exhausted ? "failed" : "active",
         ...(agreed ? { agreedPrice: turn.price } : {}), ...(exhausted ? { failureReason: "The agents did not reach a mutually acceptable price within the allowed rounds." } : {}) };
     let result = addAudit({ ...state, sessions: state.sessions.map(s => s.id === id ? updated : s) }, agreed ? "demo_agent_accepted" : "demo_agent_turn", id);
-    if (agreed && updated.mode === "automated" && updated.requestId === undefined)
+    if (agreed && updated.mode === "automated")
         result = finishDeal(result, updated);
     return result;
 }
@@ -265,17 +214,9 @@ export function endSession(state: DemoState, id: number, status: "rejected" | "c
 export function projectDemoState(state: DemoState, user: DemoUser): DemoViewState {
     const sessions = state.sessions.filter(s => user.role === "admin" || (user.role === "buyer" ? s.buyerId === user.id : state.products.some(p => p.id === s.productId && p.seller_id === user.id))).map(s => {
         const { budget, privateLimits, ...publicSession } = s;
-        const view = structuredClone(publicSession);
-        // Utility scores reveal the buyer's preferences, so only the buyer sees them.
-        if (user.role !== "buyer")
-            view.rounds = view.rounds.map(({ utility, ...turn }) => turn);
-        return { ...view, maxRounds: s.maxRounds ?? privateLimits?.rounds ?? state.rules.find(r => r.productId === s.productId)?.rounds ?? 4, ...(user.role === "buyer" && budget !== undefined ? { budget } : {}) };
+        return { ...structuredClone(publicSession), maxRounds: privateLimits?.rounds ?? state.rules.find(r => r.productId === s.productId)?.rounds ?? 4, ...(user.role === "buyer" ? { budget } : {}) };
     });
-    const requests = (state.requests ?? []).filter(r => user.role === "admin" || (user.role === "buyer" && r.buyerId === user.id)).map(r => {
-        const { budget, ...publicRequest } = r;
-        return { ...structuredClone(publicRequest), ...(user.role === "buyer" && budget !== undefined ? { budget } : {}) };
-    });
-    return { products: structuredClone(state.products), users: structuredClone(state.users), audit: structuredClone(state.audit), sessions, requests,
+    return { products: structuredClone(state.products), users: structuredClone(state.users), audit: structuredClone(state.audit), sessions,
         rules: user.role === "seller" ? structuredClone(state.rules.filter(r => state.products.some(p => p.id === r.productId && p.seller_id === user.id))) : [],
         deals: structuredClone(visibleDeals(state, user)), notices: structuredClone(state.notices.filter(n => n.userId === user.id)) };
 }
@@ -287,4 +228,22 @@ export function mergeDemoView(state: DemoState, view: DemoViewState, user: DemoU
     return { ...state, products: view.products, users: view.users, audit: view.audit,
         deals: mergeById(state.deals, view.deals), notices: mergeById(state.notices, view.notices),
         rules: user.role === "seller" ? [...view.rules.filter(r => state.products.some(p => p.id === r.productId && p.seller_id === user.id)), ...state.rules.filter(r => !state.products.some(p => p.id === r.productId && p.seller_id === user.id))] : state.rules };
+}
+
+// Restore only complete compatible demo envelopes. Unknown secret fields are rejected.
+export function validateDemoState(value: unknown): value is DemoState {
+    try {
+        const s=value as DemoState;
+        if(!s||![s.products,s.users,s.rules,s.sessions,s.deals,s.notices,s.audit].every(Array.isArray))return false;
+        if(s.users.length<1||[s.users,s.products,s.sessions,s.deals,s.notices,s.audit].some(rows=>new Set(rows.map(r=>r.id)).size!==rows.length))return false;
+        const id=(v:number)=>Number.isSafeInteger(v)&&v>0;
+        const number=(v:number)=>Number.isFinite(v)&&v>=0;
+        return s.users.every(u=>id(u.id)&&typeof u.name==="string"&&typeof u.email==="string"&&["buyer","seller","admin"].includes(u.role)&&typeof u.active==="boolean")
+            &&s.products.every(p=>id(p.id)&&id(p.seller_id)&&typeof p.name==="string"&&typeof p.category==="string"&&Number.isFinite(Number(p.base_price))&&Number(p.base_price)>0&&Number.isInteger(p.stock_quantity)&&p.stock_quantity>=0)
+            &&s.rules.every(r=>id(r.productId)&&number(r.minimum)&&number(r.threshold)&&number(r.discount)&&Number.isInteger(r.rounds)&&r.rounds>=1&&r.rounds<=20&&typeof r.enabled==="boolean")
+            &&s.sessions.every(x=>id(x.id)&&s.users.some(u=>u.id===x.buyerId)&&s.products.some(p=>p.id===x.productId)&&number(x.budget)&&["active","awaiting_approval","completed","failed","rejected","cancelled"].includes(x.status)&&["automated","semi_automated"].includes(x.mode)&&Array.isArray(x.rounds)&&x.rounds.every(m=>number(m.price)&&Number.isInteger(m.number)&&typeof m.message==="string"&&["buyer","seller"].includes(m.agent)&&["offer","counteroffer","accept"].includes(m.action)))
+            &&s.deals.every(d=>id(d.id)&&number(d.price)&&s.sessions.some(x=>x.id===d.sessionId))
+            &&s.notices.every(n=>id(n.id)&&id(n.userId)&&typeof n.text==="string"&&typeof n.read==="boolean"&&typeof n.href==="string"&&n.href.startsWith("/")&&!n.href.startsWith("//"))
+            &&s.audit.every(a=>id(a.id)&&typeof a.action==="string"&&typeof a.time==="string");
+    }catch{return false;}
 }

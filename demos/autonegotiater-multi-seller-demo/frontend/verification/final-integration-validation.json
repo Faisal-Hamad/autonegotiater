@@ -1,0 +1,32 @@
+{
+  "date": "2026-10-19",
+  "originalChecked": 84,
+  "originalMismatches": [],
+  "protectedCopy": {
+    "backend": {
+      "checked": 25,
+      "mismatches": []
+    },
+    "infra": {
+      "checked": 5,
+      "mismatches": []
+    }
+  },
+  "mockEnabled": true,
+  "changedCheckpointFiles": [
+    "frontend/components/admin-reports.tsx",
+    "frontend/components/competitive-negotiation.tsx",
+    "frontend/components/competitive-provider.tsx",
+    "frontend/components/demo-pages.tsx",
+    "frontend/components/demo-provider.tsx",
+    "frontend/components/seller-competitive.tsx",
+    "frontend/components/seller-session-view.tsx",
+    "frontend/components/site-shell.tsx",
+    "frontend/lib/competitive.ts",
+    "frontend/lib/demo-model.ts",
+    "frontend/lib/report-download.ts",
+    "frontend/lib/reports.ts",
+    "frontend/tests/verify-reports.cjs",
+    "AUTONEGOTIATER_COMPLETE_USER_JOURNEYS.md"
+  ]
+}

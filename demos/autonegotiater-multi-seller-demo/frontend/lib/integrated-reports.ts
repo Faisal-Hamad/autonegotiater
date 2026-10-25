@@ -1,0 +1,33 @@
+import {catalogIdentity} from "./competitive";
+import {buildReport,reportDate,type Report,type ReportType,type ReportSection} from "./reports";
+import type {DemoViewState} from "./demo-model";
+import type {DemoAgreement} from "./demo-integration";
+import type {OperationalSession} from "../components/competitive-provider";
+type PublicListing={productId:number;productName:string;sellerId:number;storefrontKey:string;storefrontName:string;price:number;stock:number;deliveryDays:number};
+const sar=(n:number)=>`${n.toFixed(2)} SAR`;
+export function buildIntegratedReport(state:DemoViewState,type:ReportType,id:number|string,date:string,records:OperationalSession[],agreements:DemoAgreement[],listings:PublicListing[]=[]):Report|null {
+    const comp=records.filter(r=>type==="session"?r.id===String(id):type==="buyer"?r.buyerId===Number(id):r.participants.some(s=>s.sellerId===Number(id)));
+    const base=type==="session"&&String(id).startsWith("competitive-")?null:buildReport(state,type,Number(id),date);
+    if(!base&&!comp.length)return null;
+    const report:Report=base??{id:`DEMO-session-${id}-${date.replace(/[^0-9]/g,"")}`,title:`Negotiation Session Report ${id}`,generatedAt:reportDate(date),sections:[]};
+    const sections:ReportSection[]=[];
+    const owned=listings.filter(l=>type!=="seller"||l.sellerId===Number(id));
+    if(type==="seller")sections.push({title:"Seller Product Listings",columns:["Seller ID","Seller","Product Listing ID","Catalog Product ID","Product","Opening Price","Stock","Delivery"],rows:owned.map(l=>[String(l.sellerId),state.users.find(u=>u.id===l.sellerId)?.name??`Seller ${l.sellerId}`,l.storefrontKey,catalogIdentity(l.productId),l.productName,sar(l.price),String(l.stock),`${l.deliveryDays} days`])});
+    sections.push({title:"Competitive Negotiation History",columns:["Session ID","Type","Buyer","Product","Quantity","Status","Started","Updated","Decision"],rows:comp.map(r=>[r.id,r.type,state.users.find(u=>u.id===r.buyerId)?.name??`Buyer ${r.buyerId}`,r.productName,String(r.quantity),r.status,reportDate(r.createdAt),reportDate(r.updatedAt),r.decisionAt?reportDate(r.decisionAt):"No final decision"])});
+    for(const r of comp){
+        const participants=r.participants.filter(p=>type!=="seller"||p.sellerId===Number(id));
+        sections.push({title:`Requirements — ${r.id}`,columns:["Field","Value"],rows:[["Quantity",String(r.quantity)],["Public target per unit",sar(r.targetPrice)],["Delivery deadline",`${r.deliveryDays} days`],["Session outcome",r.status],["Buyer decision",r.decisionAt?r.phase:"Not decided"],["Private Buyer maximum","Excluded from operational reports"],["Individual offer timestamps","Recorded for new competitive messages; older/legacy events may be unavailable"]]});
+        sections.push({title:`Seller Listing Outcomes — ${r.id}`,columns:["Seller ID","Seller","Product Listing ID","Catalog Product ID","Opening Price","Latest Quote","Agent Agreement","Delivery","Status"],rows:participants.map(p=>[String(p.sellerId),state.users.find(u=>u.id===p.sellerId)?.name??`Seller ${p.sellerId}`,p.id,catalogIdentity(r.product.id),sar(p.startingPrice),p.currentPrice===undefined?"Not offered":sar(p.currentPrice),p.agreedPrice===undefined?"No Agreement":sar(p.agreedPrice),`${p.deliveryDays} days`,p.status])});
+        const rows:string[][]=[];let sequence=0;
+        for(let round=1;round<=r.round;round++){const batches=participants.map(p=>({p,messages:p.history.filter(m=>m.round===round)}));const count=Math.max(0,...batches.map(b=>b.messages.length));for(let i=0;i<count;i++)for(const b of batches){const m=b.messages[i];if(m)rows.push([String(++sequence),String(m.round),m.timestamp?reportDate(m.timestamp):"Not recorded",b.p.id,m.agent,m.action,m.price===undefined?"—":sar(m.price),m.explanation]);}}
+        sections.push({title:`Chronological Competitive Rounds — ${r.id}`,columns:["Sequence","Round","Timestamp","Product Listing ID","Agent","Action","Price","Explanation"],rows});
+    }
+    const recorded=agreements.filter(g=>type==="session"?g.sessionId===String(id):type==="buyer"?g.buyerId===Number(id):g.sellerId===Number(id));
+    sections.push({title:"Recorded Competitive DEMO Agreements",columns:["Agreement","Session","Seller ID","Selected Seller","Product Listing ID","Catalog Product ID","Product","Quantity","Unit Price","Total","Delivery","Approved"],rows:recorded.map(g=>[g.id,g.sessionId,String(g.sellerId),state.users.find(u=>u.id===g.sellerId)?.name??`Seller ${g.sellerId}`,g.listingId??records.find(r=>r.id===g.sessionId)?.participants.find(p=>p.sellerId===g.sellerId&&p.agreedPrice===g.unitPrice)?.id??g.storefrontId,g.catalogProductId??catalogIdentity(g.productId),g.productName,String(g.quantity),sar(g.unitPrice),sar(g.total),`${g.deliveryDays} days`,reportDate(g.approvedAt)])});
+    const legacySessions=state.sessions.filter(s=>type==="session"?String(s.id)===String(id):type==="buyer"?s.buyerId===Number(id):state.products.find(p=>p.id===s.productId)?.seller_id===Number(id));
+    const legacyDeals=state.deals.filter(g=>type==="session"?String(g.sessionId)===String(id):type==="buyer"?g.buyerId===Number(id):g.sellerId===Number(id));
+    const total=legacySessions.length+comp.length,completed=legacySessions.filter(s=>s.status==="completed").length+comp.filter(r=>type==="seller"?recorded.some(g=>g.sessionId===r.id):r.status==="completed").length;
+    sections.unshift({title:"Combined Statistics — Both Negotiation Types",columns:["Metric","Value"],rows:[["Sessions",String(total)],["Completed sessions",String(completed)],["Completed / all sessions",total?`${(completed/total*100).toFixed(1)}% (${completed}/${total})`:"No sessions"],["Recorded Agreements",String(legacyDeals.length+recorded.length)],["Total recorded demo Agreement value",sar(legacyDeals.reduce((n,g)=>n+g.price,0)+recorded.reduce((n,g)=>n+g.total,0))],["Scope","All available local legacy and competitive records for this entity; no real payments or profit"]]});
+    // Legacy-specific tables remain explicit; combined statistics above are the platform summary.
+    report.sections=[...sections,...report.sections.map(s=>s.title==="Demo Statistics"?{...s,title:"One-to-One Statistics Only"}:s.title==="Report Scope and Limitations"?{...s,title:"One-to-One Report Scope and Limitations"}:s)];return report;
+}

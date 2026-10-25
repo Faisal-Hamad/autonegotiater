@@ -1,0 +1,69 @@
+{
+  "date": "2026-10-19",
+  "checkpoint": "before-listing-navigation-20261019-111246.zip",
+  "original": {
+    "checked": 84,
+    "mismatches": []
+  },
+  "protectedCopy": {
+    "backend": {
+      "checked": 25,
+      "mismatches": []
+    },
+    "infra": {
+      "checked": 5,
+      "mismatches": []
+    }
+  },
+  "mockEnabled": true,
+  "changedSourceFiles": [
+    "frontend/app/globals.css",
+    "frontend/components/approved-visuals.tsx",
+    "frontend/components/competitive-provider.tsx",
+    "frontend/components/demo-pages.tsx",
+    "frontend/components/seller-competitive.tsx",
+    "frontend/components/seller-session-view.tsx",
+    "frontend/components/site-shell.tsx",
+    "frontend/components/storefront-manager.tsx",
+    "frontend/components/unified-workspace.tsx",
+    "frontend/lib/competitive.ts",
+    "frontend/lib/demo-integration.ts",
+    "frontend/lib/demo-storage.ts",
+    "frontend/lib/integrated-reports.ts",
+    "AUTONEGOTIATER_COMPLETE_USER_JOURNEYS.md",
+    "AUTONEGOTIATER_IMPLEMENTATION_REPORT.md"
+  ],
+  "newSourceFiles": [
+    "frontend/tests/verify-listing-navigation.cjs"
+  ],
+  "migration": "v3 -> v4 additive; retained historical snapshots/messages/notices/agreements",
+  "tests": {
+    "verify-demo": "PASS",
+    "verify-competitive": "PASS",
+    "verify-seller-ownership": "PASS",
+    "verify-reports": "PASS",
+    "verify-english": "PASS",
+    "verify-integration": "PASS",
+    "verify-listing-navigation": "PASS",
+    "TypeScript noEmit": "PASS",
+    "Next production build": "PASS"
+  },
+  "browser": {
+    "sidebarDestinationsChecked": 24,
+    "errors": 0,
+    "retainedAgreement": "agreement-162",
+    "foreignSessionDenied": true,
+    "disabledQaListing": "local-listing-634",
+    "sharedSellerHeader": true,
+    "mobileMenuChecked": true,
+    "freshPreviewWidth": 1446,
+    "freshPreviewScrollWidth": 1446
+  },
+  "server": "http://127.0.0.1:3001",
+  "unchangedCoreFiles": {
+    "frontend/lib/api.ts": true,
+    "frontend/package.json": true,
+    "frontend/package-lock.json": true,
+    "frontend/components/competitive-negotiation.tsx": true
+  }
+}

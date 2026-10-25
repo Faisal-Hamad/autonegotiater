@@ -1,0 +1,8 @@
+{
+  "components/competitive-negotiation.tsx": "ed9782b41769912b93196fb13cb8095528904a7ae0a970cc63a9d5d0dca3ae14",
+  "components/products.tsx": "2f76a33b0c210a03da2b4e963a12c035dec49fc6173f0a7548b31bda1948c234",
+  "lib/api.ts": "7a98375c465ff27d1f946db700af2bdd0e932a8c01ff2ce62a2ff247b99bbf1f",
+  "components/approved-visuals.tsx": "29a6b8f62a8925fab75fb301f154bf7edf8f3e582e31b3dceec578b3f4f491b8",
+  "package.json": "e540c1b41b6ea8aed6924c6278426e2acc3cbc8c67de69b48f6daf7d0b1a569b",
+  "package-lock.json": "4bba0d6ffbc421c6e54a9cf2825e4167aa11b2fdcb71afad30abd1fbb67243b3"
+}

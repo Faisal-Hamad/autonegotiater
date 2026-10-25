@@ -1,0 +1,18 @@
+{
+  "originalSourceFilesVerified": 84,
+  "originalSourceUnchanged": true,
+  "changedOriginalPaths": [],
+  "protectedCopyUnchanged": {
+    "backend": true,
+    "infra": true
+  },
+  "existingContractsAndPackagesUnchanged": {
+    "lib/api.ts": true,
+    "lib/demo-model.ts": true,
+    "package.json": true,
+    "package-lock.json": true,
+    "next.config.ts": true
+  },
+  "safeMockEnvironment": true,
+  "gitMetadataExists": false
+}

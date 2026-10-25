@@ -375,7 +375,7 @@ async def ensure_initial_workspace_data(session: AsyncSession) -> None:
 
 
 async def build_workspace_state(session: AsyncSession, viewer_id: int | None = None) -> dict[str, Any]:
-    await ensure_initial_workspace_data(session)
+    # Production reads must never seed or rewrite business data.
 
     users = (await session.scalars(select(User).order_by(User.id))).all()
     products = (await session.scalars(select(Product).order_by(Product.id))).all()
@@ -664,11 +664,11 @@ async def build_workspace_state(session: AsyncSession, viewer_id: int | None = N
             {
                 "id": u.id,
                 "name": f"{u.first_name} {u.last_name}".strip(),
-                "email": u.email,
+                "email": u.email if viewer is not None and (viewer.role == "admin" or u.id == viewer.id) else "",
                 "role": u.role,
                 "active": u.is_active,
             }
-            for u in users
+            for u in users if viewer is not None and (viewer.role == "admin" or u.id == viewer.id or u.role == "seller")
         ],
         "rules": out_rules,
         "sessions": out_sessions,
@@ -682,7 +682,7 @@ async def build_workspace_state(session: AsyncSession, viewer_id: int | None = N
                 "time": a.created_at.isoformat() if a.created_at else datetime.now(timezone.utc).isoformat(),
                 "reference": a.session_id or a.user_id or a.id,
             }
-            for a in audits
+            for a in audits if viewer is not None and viewer.role == "admin"
         ],
     }
 
@@ -963,6 +963,11 @@ async def create_negotiation_session(
 async def _finalize_deal_in_db(
     session: AsyncSession, neg_session: NegotiationSession, product: Product, price: Decimal, meta: dict[str, Any], closed_by: str
 ) -> None:
+    product = await session.scalar(select(Product).where(Product.id == product.id).with_for_update().execution_options(populate_existing=True))
+    rule = await session.scalar(select(SellerRule).where(SellerRule.product_id == product.id))
+    floor = max(product.min_acceptable_price, rule.min_price if rule else Decimal("0"), product.base_price * (Decimal("1") - (rule.max_discount if rule else Decimal("0")) / 100))
+    if price < floor or price > neg_session.max_budget:
+        raise HTTPException(status_code=409, detail="The agreed price is no longer within the authorized limits.")
     existing_deal = await session.scalar(select(Deal).where(Deal.session_id == neg_session.id))
     if existing_deal:
         return
@@ -993,7 +998,7 @@ async def _finalize_deal_in_db(
             "seller_id": product.seller_id,
         },
         closed_by=closed_by,
-        payment_status="completed",
+        payment_status="pending",
     )
     session.add(deal)
     session.add(
@@ -1341,6 +1346,8 @@ async def end_negotiation_session(
         raise HTTPException(status_code=403, detail="Only the owning buyer can end this session.")
     _reject_request_session(neg_session)
 
+    if neg_session.status != "active":
+        raise HTTPException(status_code=409, detail="This session has already ended.")
     neg_session.status = "cancelled"
     neg_session.ended_at = datetime.now(timezone.utc)
     ui_status = "rejected" if payload.status == "rejected" else "cancelled"

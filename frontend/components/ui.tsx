@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { privateIntegrationBlocker } from "@/lib/api-contracts";
 import type { ReactNode } from "react";
 export function Heading({ eyebrow, title, description, action }: {
     eyebrow?: string;
@@ -36,4 +37,4 @@ export function Stats({ items }: {
 }
 export function BackendPending({ title = "Backend integration pending" }: {
     title?: string;
-}) { return <Empty title={title} description="This action has no FastAPI endpoint yet. The interactive experience is available only in local Mock Data development mode." href="/products" label="Browse products"/>; }
+}) { return <Empty title={title} description={privateIntegrationBlocker} href="/products" label="Browse products"/>; }
