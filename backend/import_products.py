@@ -57,6 +57,8 @@ SEED_IMAGE_MAP = {
 
 def load_or_fetch_products() -> list[dict]:
     fetched_items: list[dict] = []
+    data = json.loads(PRODUCTS_FILE.read_text(encoding="utf-8"))
+    curated_iphones = [item for item in data.get("products", []) if item.get("catalog_variant") is True]
     try:
         for api_cat, project_cat in DUMMYJSON_CATEGORY_MAP.items():
             url = f"https://dummyjson.com/products/category/{api_cat}?limit=4"
@@ -67,6 +69,9 @@ def load_or_fetch_products() -> list[dict]:
                     item["category"] = project_cat
                     fetched_items.append(item)
         if fetched_items:
+            # The live feed is supplemental; never replace the local iPhone catalog.
+            fetched_names = {item.get("title", "").strip() for item in fetched_items}
+            fetched_items.extend(item for item in curated_iphones if item["title"] not in fetched_names)
             PRODUCTS_FILE.write_text(
                 json.dumps({"products": fetched_items, "total": len(fetched_items), "skip": 0, "limit": len(fetched_items)}, indent=2),
                 encoding="utf-8",
@@ -75,7 +80,6 @@ def load_or_fetch_products() -> list[dict]:
     except Exception:
         pass
 
-    data = json.loads(PRODUCTS_FILE.read_text(encoding="utf-8"))
     items = []
     for item in data.get("products", []):
         raw_cat = item.get("category", "")

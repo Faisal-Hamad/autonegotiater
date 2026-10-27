@@ -1,18 +1,21 @@
-"""Fill the database with fake users, products and seller rules.
+"""Idempotently add demo users, products and catalog choices.
 
 Run inside the fastapi container:  python seed.py
-Safe to run twice: it does nothing if users already exist.
+Repeated runs preserve existing rows and add only missing seeded entries.
 """
 import asyncio
+import json
 from decimal import Decimal
+from pathlib import Path
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from app.db import SessionLocal, engine
 from app.models import Product, SellerRule, User
 from app.security import hash_password
 
 DEMO_PASSWORD = "Demo@1234"
+PRODUCTS_FILE = Path(__file__).with_name("products.json")
 
 USERS = [
     ("Ahmed", "Alharbi", "seller1@demo.autonegotiater.com", "0551000001", "seller"),
@@ -64,22 +67,26 @@ PRODUCTS = [
 
 async def seed() -> None:
     async with SessionLocal() as session:
-        if await session.scalar(select(func.count(User.id))):
-            print("Database already has users, skipping seed.")
-            return
-
+        existing_users = {u.email: u for u in (await session.scalars(select(User))).all()}
+        new_users = []
         password_hash = hash_password(DEMO_PASSWORD)
-        users = [
-            User(first_name=first, last_name=last, email=email, phone=phone, role=role, password_hash=password_hash)
-            for first, last, email, phone, role in USERS
-        ]
-        session.add_all(users)
+        for first, last, email, phone, role in USERS:
+            if email not in existing_users:
+                user = User(first_name=first, last_name=last, email=email, phone=phone, role=role, password_hash=password_hash)
+                session.add(user)
+                new_users.append(user)
+                existing_users[email] = user
         await session.flush()
+        users = [existing_users[email] for _, _, email, _, _ in USERS]
 
-        products = []
+        existing_names = set((await session.execute(select(Product.name, Product.category))).all())
+        seeded_products = []
+        # Keep the original demo inventory and only add entries that are absent.
         for seller_idx, name, category, base, min_pct, stock, description in PRODUCTS:
+            if (name, category) in existing_names:
+                continue
             base_price = Decimal(base).quantize(Decimal("0.01"))
-            products.append(Product(
+            product = Product(
                 seller_id=users[seller_idx].id,
                 name=name,
                 description=description,
@@ -87,23 +94,52 @@ async def seed() -> None:
                 base_price=base_price,
                 min_acceptable_price=(base_price * Decimal(str(min_pct))).quantize(Decimal("0.01")),
                 stock_quantity=stock,
-            ))
-        session.add_all(products)
+            )
+            session.add(product)
+            seeded_products.append(product)
+            existing_names.add((name, category))
         await session.flush()
 
-        # Negotiation rules for the first product of every two, ready for week 5.
-        for product in products[::2][:10]:
-            session.add(SellerRule(
-                seller_id=product.seller_id,
-                product_id=product.id,
-                min_price=product.min_acceptable_price,
-                max_discount=Decimal("20.00"),
-                max_rounds=6,
-                auto_accept_threshold=(product.base_price * Decimal("0.95")).quantize(Decimal("0.01")),
+        # These rows are the shared catalog templates used by the seller listing dropdown.
+        # Listings created from a template get their own Product ID while model/storage
+        # matching resolves them to the same canonical identity.
+        data = json.loads(PRODUCTS_FILE.read_text(encoding="utf-8"))
+        catalog_items = [item for item in data.get("products", []) if item.get("catalog_variant") is True]
+        catalog_products = []
+        seller_id = users[0].id
+        for item in catalog_items:
+            name = item["title"].strip()[:150]
+            category = item["category"]
+            if (name, category) in existing_names:
+                continue
+            base_price = (Decimal(str(item.get("price", 100))) * Decimal("3.75")).quantize(Decimal("0.01"))
+            catalog_products.append(Product(
+                seller_id=seller_id,
+                name=name,
+                description=item.get("description"),
+                category=category,
+                base_price=base_price,
+                min_acceptable_price=(base_price * Decimal("0.80")).quantize(Decimal("0.01")),
+                stock_quantity=0,
+                image_url=item.get("thumbnail"),
             ))
+            existing_names.add((name, category))
+        session.add_all(catalog_products)
+        await session.flush()
+
+        if seeded_products:
+            for product in seeded_products[::2][:10]:
+                session.add(SellerRule(
+                    seller_id=product.seller_id,
+                    product_id=product.id,
+                    min_price=product.min_acceptable_price,
+                    max_discount=Decimal("20.00"),
+                    max_rounds=6,
+                    auto_accept_threshold=(product.base_price * Decimal("0.95")).quantize(Decimal("0.01")),
+                ))
 
         await session.commit()
-        print(f"Seeded {len(users)} users, {len(products)} products, 10 seller rules. Password: {DEMO_PASSWORD}")
+        print(f"Ensured {len(users)} demo users; added {len(seeded_products)} demo products and {len(catalog_products)} iPhone catalog variants.")
 
 
 async def main() -> None:

@@ -2,6 +2,9 @@
 from copy import deepcopy
 from decimal import Decimal, ROUND_FLOOR, ROUND_CEILING
 from datetime import datetime, timezone
+from app.negotiation.buyer_agent import BuyerAgent, BuyerContext
+from app.negotiation.seller_agent import SellerAgent, SellerContext
+from app.negotiation.schemas import Decision
 
 def cents(value, upward=False):
     d=Decimal(str(value))*100
@@ -42,35 +45,57 @@ def step(engine):
         if not s["participates"] or s["status"] in ("agreed","declined"): continue
         limit=min(r["maxRounds"],s.get("maxRounds",r["maxRounds"]))
         if n>limit: s.update(status="declined",reason="Maximum rounds exhausted"); continue
-        floor=cents(s["minimumPrice"],True); maximum=cents(r["maximumPrice"]); target=cents(r["targetPrice"])
-        offer=min(maximum,target+((maximum-target)*(n-1)//max(limit-1,1)))
+        floor=cents(s["minimumPrice"],True); maximum=cents(r["maximumPrice"])
         history=s["history"]
         def message(agent,action,price,text): history.append({"round":n,"agent":agent,"action":action,"price":price/100,"explanation":text,"timestamp":now()})
-        if s.get("currentPrice") is not None and cents(s["currentPrice"])<=offer:
-            price=cents(s["currentPrice"])
+        buyer_agent = BuyerAgent(BuyerContext(
+            target_price=Decimal(str(r["targetPrice"])),
+            maximum_price=Decimal(str(r["maximumPrice"])),
+        ))
+        buyer = buyer_agent.decide(
+            round_number=n,
+            max_rounds=limit,
+            current_seller_price=Decimal(str(s["currentPrice"])) if s.get("currentPrice") is not None else None,
+        )
+        if buyer.action == "accept":
+            price=cents(buyer.price)
             if floor<=price<=maximum:
-                message("Buyer Agent","accept",price,"I accept your current counteroffer for the requested quantity and delivery.")
+                fallback="I accept your current counteroffer for the requested quantity and delivery."
+                message("Buyer Agent","accept",price,buyer_agent.respond(buyer,fallback))
                 s.update(status="agreed",agreedPrice=price/100,reason="Both Agents accepted the same price");continue
-        message("Buyer Agent","offer",offer,"Opening target offer." if n==1 else "I can improve my offer within the authorized purchase limits.")
+        offer=cents(buyer.price)
+        fallback="Opening target offer." if n==1 else "I can improve my offer within the authorized purchase limits."
+        message("Buyer Agent","offer",offer,buyer_agent.respond(buyer,fallback))
         starting=cents(s["startingPrice"]); concession=max(1,cents(s.get("concession",max(0.01,s["startingPrice"]*.04))))
-        counter=max(floor,starting-concession*(n-1))
-        if s.get("currentPrice") is not None: counter=min(counter,cents(s["currentPrice"]))
         competitor=min((cents(p) for key,p in prior.items() if key!=s["id"]),default=None)
+        seller_agent=SellerAgent(SellerContext(
+            asking_price=Decimal(str(s["startingPrice"])),
+            minimum_price=Decimal(str(s["minimumPrice"])),
+            concession=Decimal(concession)/100,
+        ))
+        seller=seller_agent.decide(
+            current_buyer_offer=Decimal(offer)/100,
+            previous_seller_price=Decimal(str(s["currentPrice"])) if s.get("currentPrice") is not None else None,
+            competing_price=Decimal(competitor)/100 if competitor is not None and s.get("strategy","competitive")=="competitive" else None,
+            round_number=n,
+            max_rounds=limit,
+        )
+        counter=cents(seller.price)
         explanation="Counteroffer for the requested quantity and delivery."
-        if competitor is not None and s.get("strategy","competitive")=="competitive":
-            improved=max(floor,min(counter,competitor-max(1,int(competitor*.01))))
-            if improved<counter:
-                counter=improved; explanation="I improved my counteroffer after receiving an anonymous competing quote."
-                history.append({"round":n,"agent":"Market update","action":"announcement","price":competitor/100,"explanation":"Anonymous eligible competing quote; no competitor identity or private limits are shared.","timestamp":now()})
-        if offer>=counter:
+        if competitor is not None and seller.price < Decimal(starting-concession*(n-1))/100:
+            explanation="I improved my counteroffer after receiving an anonymous competing quote."
+            history.append({"round":n,"agent":"Market update","action":"announcement","price":competitor/100,"explanation":"Anonymous eligible competing quote; no competitor identity or private limits are shared.","timestamp":now()})
+        if seller.action=="accept":
             if not floor<=offer<=maximum: raise ValueError("Agreement boundaries violated")
-            message("Seller Agent","accept",offer,"I accept the Buyer Agent offer and the requested quantity and delivery.")
+            fallback="I accept the Buyer Agent offer and the requested quantity and delivery."
+            message("Seller Agent","accept",offer,seller_agent.respond(seller,fallback))
             s.update(currentPrice=offer/100,agreedPrice=offer/100,status="agreed",reason="Both Agents accepted the same price")
         else:
-            message("Seller Agent","counteroffer",counter,explanation);s.update(currentPrice=counter/100,status="negotiating",reason="Negotiating")
+            message("Seller Agent","counteroffer",counter,seller_agent.respond(seller,explanation));s.update(currentPrice=counter/100,status="negotiating",reason="Negotiating")
             if n==limit:
                 if counter<=maximum:
-                    message("Buyer Agent","accept",counter,"I accept the final counteroffer within the authorized requirements.")
+                    approved=Decision("accept",Decimal(counter)/100,"Final counteroffer is within the authorized requirements")
+                    message("Buyer Agent","accept",counter,buyer_agent.respond(approved,"I accept the final counteroffer within the authorized requirements."))
                     s.update(agreedPrice=counter/100,status="agreed",reason="Both Agents accepted the same price")
                 else:s.update(status="declined",reason="No price within both parties limits before the round limit")
     eligible=[s for s in e["sellers"] if s["participates"] and s.get("currentPrice") is not None]

@@ -311,9 +311,749 @@
       "images": [
         "https://cdn.dummyjson.com/product-images/sports-accessories/golf-ball/1.webp"
       ]
+    },
+    {
+      "id": 1001,
+      "title": "iPhone 11 128GB",
+      "description": "iPhone 11, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 190,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1002,
+      "title": "iPhone 11 256GB",
+      "description": "iPhone 11, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 235,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1003,
+      "title": "iPhone 11 Pro 64GB",
+      "description": "iPhone 11 Pro, 64GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 210,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1004,
+      "title": "iPhone 11 Pro 256GB",
+      "description": "iPhone 11 Pro, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 300,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1005,
+      "title": "iPhone 11 Pro 512GB",
+      "description": "iPhone 11 Pro, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 390,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1006,
+      "title": "iPhone 11 Pro Max 64GB",
+      "description": "iPhone 11 Pro Max, 64GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 210,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1007,
+      "title": "iPhone 11 Pro Max 256GB",
+      "description": "iPhone 11 Pro Max, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 300,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1008,
+      "title": "iPhone 11 Pro Max 512GB",
+      "description": "iPhone 11 Pro Max, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 390,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1009,
+      "title": "iPhone 12 64GB",
+      "description": "iPhone 12, 64GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 185,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1010,
+      "title": "iPhone 12 128GB",
+      "description": "iPhone 12, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 230,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1011,
+      "title": "iPhone 12 256GB",
+      "description": "iPhone 12, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 275,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1012,
+      "title": "iPhone 12 mini 64GB",
+      "description": "iPhone 12 mini, 64GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 185,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1013,
+      "title": "iPhone 12 mini 128GB",
+      "description": "iPhone 12 mini, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 230,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1014,
+      "title": "iPhone 12 mini 256GB",
+      "description": "iPhone 12 mini, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 275,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1015,
+      "title": "iPhone 12 Pro 128GB",
+      "description": "iPhone 12 Pro, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 295,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1016,
+      "title": "iPhone 12 Pro 256GB",
+      "description": "iPhone 12 Pro, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 340,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1017,
+      "title": "iPhone 12 Pro 512GB",
+      "description": "iPhone 12 Pro, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 430,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1018,
+      "title": "iPhone 12 Pro Max 128GB",
+      "description": "iPhone 12 Pro Max, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 295,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1019,
+      "title": "iPhone 12 Pro Max 256GB",
+      "description": "iPhone 12 Pro Max, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 340,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1020,
+      "title": "iPhone 12 Pro Max 512GB",
+      "description": "iPhone 12 Pro Max, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 430,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1021,
+      "title": "iPhone 13 128GB",
+      "description": "iPhone 13, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 300,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1022,
+      "title": "iPhone 13 256GB",
+      "description": "iPhone 13, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 345,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1023,
+      "title": "iPhone 13 512GB",
+      "description": "iPhone 13, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 435,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1024,
+      "title": "iPhone 13 mini 128GB",
+      "description": "iPhone 13 mini, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 300,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1025,
+      "title": "iPhone 13 mini 256GB",
+      "description": "iPhone 13 mini, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 345,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1026,
+      "title": "iPhone 13 mini 512GB",
+      "description": "iPhone 13 mini, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 435,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1027,
+      "title": "iPhone 13 Pro 128GB",
+      "description": "iPhone 13 Pro, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 365,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1028,
+      "title": "iPhone 13 Pro 256GB",
+      "description": "iPhone 13 Pro, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 410,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1029,
+      "title": "iPhone 13 Pro 512GB",
+      "description": "iPhone 13 Pro, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 500,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1030,
+      "title": "iPhone 13 Pro 1TB",
+      "description": "iPhone 13 Pro, 1TB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 680,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1031,
+      "title": "iPhone 13 Pro Max 128GB",
+      "description": "iPhone 13 Pro Max, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 365,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1032,
+      "title": "iPhone 13 Pro Max 256GB",
+      "description": "iPhone 13 Pro Max, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 410,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1033,
+      "title": "iPhone 13 Pro Max 512GB",
+      "description": "iPhone 13 Pro Max, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 500,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1034,
+      "title": "iPhone 13 Pro Max 1TB",
+      "description": "iPhone 13 Pro Max, 1TB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 680,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1035,
+      "title": "iPhone 14 128GB",
+      "description": "iPhone 14, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 370,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1036,
+      "title": "iPhone 14 256GB",
+      "description": "iPhone 14, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 415,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1037,
+      "title": "iPhone 14 512GB",
+      "description": "iPhone 14, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 505,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1038,
+      "title": "iPhone 14 Plus 128GB",
+      "description": "iPhone 14 Plus, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 400,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1039,
+      "title": "iPhone 14 Plus 256GB",
+      "description": "iPhone 14 Plus, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 445,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1040,
+      "title": "iPhone 14 Plus 512GB",
+      "description": "iPhone 14 Plus, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 535,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1041,
+      "title": "iPhone 14 Pro 128GB",
+      "description": "iPhone 14 Pro, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 435,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1042,
+      "title": "iPhone 14 Pro 256GB",
+      "description": "iPhone 14 Pro, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 480,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1043,
+      "title": "iPhone 14 Pro 512GB",
+      "description": "iPhone 14 Pro, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 570,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1044,
+      "title": "iPhone 14 Pro 1TB",
+      "description": "iPhone 14 Pro, 1TB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 750,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1045,
+      "title": "iPhone 14 Pro Max 128GB",
+      "description": "iPhone 14 Pro Max, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 435,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1046,
+      "title": "iPhone 14 Pro Max 256GB",
+      "description": "iPhone 14 Pro Max, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 480,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1047,
+      "title": "iPhone 14 Pro Max 512GB",
+      "description": "iPhone 14 Pro Max, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 570,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1048,
+      "title": "iPhone 14 Pro Max 1TB",
+      "description": "iPhone 14 Pro Max, 1TB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 750,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1049,
+      "title": "iPhone 15 128GB",
+      "description": "iPhone 15, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 450,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1050,
+      "title": "iPhone 15 256GB",
+      "description": "iPhone 15, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 495,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1051,
+      "title": "iPhone 15 512GB",
+      "description": "iPhone 15, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 585,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1052,
+      "title": "iPhone 15 Plus 128GB",
+      "description": "iPhone 15 Plus, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 480,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1053,
+      "title": "iPhone 15 Plus 256GB",
+      "description": "iPhone 15 Plus, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 525,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1054,
+      "title": "iPhone 15 Plus 512GB",
+      "description": "iPhone 15 Plus, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 615,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1055,
+      "title": "iPhone 15 Pro 128GB",
+      "description": "iPhone 15 Pro, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 515,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1056,
+      "title": "iPhone 15 Pro 256GB",
+      "description": "iPhone 15 Pro, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 560,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1057,
+      "title": "iPhone 15 Pro 512GB",
+      "description": "iPhone 15 Pro, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 650,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1058,
+      "title": "iPhone 15 Pro 1TB",
+      "description": "iPhone 15 Pro, 1TB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 830,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1059,
+      "title": "iPhone 15 Pro Max 256GB",
+      "description": "iPhone 15 Pro Max, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 560,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1060,
+      "title": "iPhone 15 Pro Max 512GB",
+      "description": "iPhone 15 Pro Max, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 650,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1061,
+      "title": "iPhone 15 Pro Max 1TB",
+      "description": "iPhone 15 Pro Max, 1TB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 830,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1062,
+      "title": "iPhone 16 128GB",
+      "description": "iPhone 16, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 530,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1063,
+      "title": "iPhone 16 256GB",
+      "description": "iPhone 16, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 575,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1064,
+      "title": "iPhone 16 512GB",
+      "description": "iPhone 16, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 665,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1065,
+      "title": "iPhone 16 Plus 128GB",
+      "description": "iPhone 16 Plus, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 560,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1066,
+      "title": "iPhone 16 Plus 256GB",
+      "description": "iPhone 16 Plus, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 605,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1067,
+      "title": "iPhone 16 Plus 512GB",
+      "description": "iPhone 16 Plus, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 695,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1068,
+      "title": "iPhone 16 Pro 128GB",
+      "description": "iPhone 16 Pro, 128GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 595,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1069,
+      "title": "iPhone 16 Pro 256GB",
+      "description": "iPhone 16 Pro, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 640,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1070,
+      "title": "iPhone 16 Pro 512GB",
+      "description": "iPhone 16 Pro, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 730,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1071,
+      "title": "iPhone 16 Pro 1TB",
+      "description": "iPhone 16 Pro, 1TB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 910,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1072,
+      "title": "iPhone 16 Pro Max 256GB",
+      "description": "iPhone 16 Pro Max, 256GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 640,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1073,
+      "title": "iPhone 16 Pro Max 512GB",
+      "description": "iPhone 16 Pro Max, 512GB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 730,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
+    },
+    {
+      "id": 1074,
+      "title": "iPhone 16 Pro Max 1TB",
+      "description": "iPhone 16 Pro Max, 1TB storage. Catalog option for seller listings; condition and included accessories are specified per listing.",
+      "category": "Electronics",
+      "price": 910,
+      "stock": 1,
+      "brand": "Apple",
+      "catalog_variant": true
     }
   ],
-  "total": 24,
+  "total": 98,
   "skip": 0,
-  "limit": 24
+  "limit": 98
 }

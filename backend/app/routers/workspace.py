@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR, ROUND_HALF_UP
 import math
 from typing import Any
 
@@ -11,6 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.models import AuditLog, BuyerRequest, Deal, NegotiationSession, Offer, Product, Rating, SellerRule, User
 from app.security import hash_password
+from app.negotiation.buyer_agent import BuyerAgent, BuyerContext
+from app.negotiation.seller_agent import SellerAgent, SellerContext
+from app.negotiation.schemas import Decision
 
 router = APIRouter(prefix="/workspace", tags=["workspace"])
 
@@ -1048,6 +1051,79 @@ def _buyer_accepts(
     return counter_cents <= next_offer
 
 
+def _one_to_one_buyer_turn(
+    offers: list[Offer], *, target: int, budget: int, asking: int, max_rounds: int,
+) -> dict[str, Any]:
+    """Adapt a buyer-only decision; seller private limits are not passed here."""
+    last_offer = offers[-1] if offers else None
+    previous_round = max((offer.round_number for offer in offers), default=0)
+    opening = min(target, max(1, asking * 55 // 100))
+    previous_buyer = max((int(offer.price * 100) for offer in offers if offer.offered_by == "buyer"), default=0)
+    current_seller = None
+    if last_offer and last_offer.offered_by == "seller":
+        last_action = (last_offer.conditions or {}).get("action", "counteroffer")
+        if last_action == "counteroffer":
+            current_seller = last_offer.price
+    decision_round = previous_round + 1
+    agent = BuyerAgent(BuyerContext(
+        target_price=Decimal(target) / 100,
+        maximum_price=Decimal(budget) / 100,
+        opening_price=Decimal(opening) / 100,
+        acceptance_price=Decimal(target) / 100,
+    ))
+    decision = agent.decide(
+        round_number=decision_round,
+        max_rounds=max_rounds,
+        current_seller_price=current_seller,
+        previous_buyer_offer=Decimal(previous_buyer) / 100 if previous_buyer else None,
+    )
+    if decision.action == "accept":
+        fallback = "I accept this counteroffer and the proposed conditions."
+        return {"agent": "buyer", "round": last_offer.round_number, "action": "accept",
+                "price": decision.price, "message": agent.respond(decision, fallback), "agreed": True}
+    if decision_round > max_rounds:
+        return {"exhausted_before_offer": True}
+    message = ("I am opening with a lower proposal for these terms." if decision_round == 1
+               else "I can increase my previous proposal to move the discussion forward.")
+    message = agent.respond(decision, message)
+    return {"agent": "buyer", "round": decision_round, "action": "offer", "price": decision.price,
+            "message": message, "agreed": False}
+
+
+def _one_to_one_seller_turn(
+    offers: list[Offer], *, asking: int, floor: int, threshold: int, scenario: str, max_rounds: int,
+) -> dict[str, Any]:
+    """Adapt a seller-only decision; buyer budget and target are not passed here."""
+    last_offer = offers[-1]
+    round_num = last_offer.round_number
+    target = (max(floor, (asking * 95 + 99) // 100) if scenario == "failed" else floor)
+    previous_seller = min((int(offer.price * 100) for offer in offers if offer.offered_by == "seller"),
+                          default=asking)
+    agent = SellerAgent(SellerContext(
+        asking_price=Decimal(asking) / 100,
+        minimum_price=Decimal(floor) / 100,
+        concession=None,
+        target_price=Decimal(target) / 100,
+        auto_accept_threshold=Decimal(threshold) / 100,
+        accept_at_threshold=scenario != "failed",
+    ))
+    decision = agent.decide(
+        current_buyer_offer=last_offer.price,
+        round_number=round_num,
+        max_rounds=max_rounds,
+        previous_seller_price=Decimal(previous_seller) / 100,
+    )
+    if decision.action == "accept":
+        fallback = "I accept the buyer's proposal and the proposed conditions."
+        return {"agent": "seller", "round": round_num, "action": "accept", "price": decision.price,
+                "message": agent.respond(decision, fallback), "agreed": True}
+    message = ("My opening counteroffer reflects the public listing price." if round_num == 1
+               else "I can reduce my previous counteroffer for these terms.")
+    message = agent.respond(decision, message)
+    return {"agent": "seller", "round": round_num, "action": "counteroffer", "price": decision.price,
+            "message": message, "agreed": False}
+
+
 async def _run_agent_turn(
     session: AsyncSession,
     neg_session: NegotiationSession,
@@ -1104,25 +1180,26 @@ async def _run_agent_turn(
     if not rule_enabled:
         return fail_session("The seller negotiation agent is currently disabled.")
 
-    asking = _cents(product.base_price)
-    rule_min = float(rule.min_price) if rule else float(product.min_acceptable_price)
-    rule_disc = float(rule.max_discount) if rule else 20.0
+    asking = int((product.base_price * 100).to_integral_value(rounding=ROUND_FLOOR))
+    rule_min = rule.min_price if rule else product.min_acceptable_price
+    rule_disc = rule.max_discount if rule else Decimal("20.00")
     max_rounds = int(rule.max_rounds) if rule else 4
     rule_thresh = (
-        float(rule.auto_accept_threshold)
+        rule.auto_accept_threshold
         if rule and rule.auto_accept_threshold is not None
-        else float(product.base_price)
+        else product.base_price
     )
-    floor = _seller_floor(max(rule_min, float(product.base_price) * (1.0 - rule_disc / 100.0)))
-    budget = _cents(neg_session.max_budget)
+    floor_price = max(rule_min, product.base_price * (Decimal("1") - rule_disc / Decimal("100")))
+    floor = int((floor_price * 100).to_integral_value(rounding=ROUND_CEILING))
+    budget = int((neg_session.max_budget * 100).to_integral_value(rounding=ROUND_FLOOR))
     scenario = meta.get("scenario", "agreement")
 
     limits = meta.get("privateLimits") or {
         "asking": asking,
         "floor": floor,
-        "buyerTarget": min(budget, max(1, math.floor(asking * 0.65))) if scenario == "failed" else budget,
+        "buyerTarget": min(budget, max(1, asking * 65 // 100)) if scenario == "failed" else budget,
         "rounds": max(1, min(20, max_rounds)),
-        "threshold": max(floor, _cents(rule_thresh)),
+        "threshold": max(floor, int((rule_thresh * 100).to_integral_value(rounding=ROUND_FLOOR))),
     }
     meta["privateLimits"] = limits
 
@@ -1134,96 +1211,110 @@ async def _run_agent_turn(
     previous_round = max((o.round_number for o in offers), default=0)
 
     agreed = False
-    last_cond = (last_offer.conditions or {}) if last_offer else {}
-    last_action = last_cond.get("action", "counteroffer" if last_offer and last_offer.offered_by == "seller" else "offer")
     offer_conditions: dict[str, Any] = {}
-
-    if (
-        agent == "buyer"
-        and last_offer
-        and last_offer.offered_by == "seller"
-        and last_action == "counteroffer"
-        and _buyer_accepts(limits, _cents(last_offer.price), previous_round, neg_session.request_id is not None, competing_cents)
-    ):
-        round_num = last_offer.round_number
-        action = "accept"
-        price_dec = last_offer.price
-        message = "I accept this counteroffer and the proposed conditions."
-        agreed = True
-    elif agent == "buyer":
-        round_num = previous_round + 1
-        if round_num > limits["rounds"]:
-            return fail_session("The maximum negotiation rounds were exhausted without agreement.")
-        opening = min(limits["buyerTarget"], max(1, math.floor(limits["asking"] * 0.55)))
-        scheduled_cents = _buyer_offer_cents(limits, round_num)
-        prev_buyer_cents = max((_cents(o.price) for o in offers if o.offered_by == "buyer"), default=0)
-        if competing_cents is not None and competing_cents < (_cents(last_offer.price) if last_offer else limits["asking"]):
-            undercut = max(2500, math.floor(competing_cents * 0.02))
-            leveraged_cents = max(opening, prev_buyer_cents, min(scheduled_cents, competing_cents - undercut))
-            price_cents = min(limits["buyerTarget"], leveraged_cents)
-            price_dec = _q2(price_cents / 100.0)
-            action = "offer"
-            comp_sar = competing_cents / 100.0
-            message = (
-                f"Another seller in this request is offering {comp_sar:.2f} SAR. "
-                f"I am proposing {float(price_dec):.2f} SAR — lower your price to stay competitive."
+    if neg_session.request_id is None:
+        if agent == "buyer":
+            decision = _one_to_one_buyer_turn(
+                offers, target=limits["buyerTarget"], budget=budget, asking=limits["asking"],
+                max_rounds=limits["rounds"],
             )
-            offer_conditions["competing_offer"] = round(comp_sar, 2)
         else:
-            price_cents = max(prev_buyer_cents, scheduled_cents)
-            price_dec = _q2(price_cents / 100.0)
-            action = "offer"
-            message = (
-                "I am opening with a lower proposal for these terms."
-                if round_num == 1
-                else "I can increase my previous proposal to move the discussion forward."
+            decision = _one_to_one_seller_turn(
+                offers, asking=limits["asking"], floor=limits["floor"], threshold=limits["threshold"],
+                scenario=scenario, max_rounds=limits["rounds"],
             )
+        if decision.get("exhausted_before_offer"):
+            return fail_session("The maximum negotiation rounds were exhausted without agreement.")
+        round_num = decision["round"]
+        action = decision["action"]
+        price_dec = decision["price"]
+        message = decision["message"]
+        agreed = decision["agreed"]
     else:
-        round_num = last_offer.round_number if last_offer else 1
-        progress = 0.0 if limits["rounds"] == 1 else (round_num - 1) / (limits["rounds"] - 1)
-        target = (
-            max(limits["floor"], math.ceil(limits["asking"] * 0.95))
-            if scenario == "failed"
-            else limits["floor"]
-        )
-        scheduled_cents = math.ceil(limits["asking"] + (target - limits["asking"]) * progress)
-        prev_seller_cents = min((_cents(o.price) for o in offers if o.offered_by == "seller"), default=limits["asking"])
-        scheduled_cents = min(scheduled_cents, prev_seller_cents)
-        price_cents = scheduled_cents
-        leverage_used = False
-
-        if competing_cents is not None and scenario != "failed" and competing_cents < scheduled_cents:
-            undercut = max(2500, math.floor(competing_cents * 0.02))
-            competitive_target = max(limits["floor"], competing_cents - undercut)
-            if competitive_target < scheduled_cents:
-                price_cents = competitive_target
-                leverage_used = True
-
-        offer_cents = _cents(last_offer.price) if last_offer else 0
-        agreed = offer_cents >= price_cents or (scenario != "failed" and offer_cents >= limits["threshold"])
-        if agreed and last_offer:
+        # Existing database-backed request behavior remains on its current adapter.
+        last_cond = (last_offer.conditions or {}) if last_offer else {}
+        last_action = last_cond.get("action", "counteroffer" if last_offer and last_offer.offered_by == "seller" else "offer")
+        if (
+            agent == "buyer" and last_offer and last_offer.offered_by == "seller" and last_action == "counteroffer"
+            and _buyer_accepts(limits, _cents(last_offer.price), previous_round, True, competing_cents)
+        ):
+            round_num = last_offer.round_number
             action = "accept"
             price_dec = last_offer.price
-            message = "I accept the buyer's proposal and the proposed conditions."
-        else:
-            action = "counteroffer"
-            price_dec = _q2(price_cents / 100.0)
-            if leverage_used and competing_cents is not None:
+            message = "I accept this counteroffer and the proposed conditions."
+            agreed = True
+        elif agent == "buyer":
+            round_num = previous_round + 1
+            if round_num > limits["rounds"]:
+                return fail_session("The maximum negotiation rounds were exhausted without agreement.")
+            opening = min(limits["buyerTarget"], max(1, math.floor(limits["asking"] * 0.55)))
+            scheduled_cents = _buyer_offer_cents(limits, round_num)
+            prev_buyer_cents = max((_cents(o.price) for o in offers if o.offered_by == "buyer"), default=0)
+            if competing_cents is not None and competing_cents < (_cents(last_offer.price) if last_offer else limits["asking"]):
+                undercut = max(2500, math.floor(competing_cents * 0.02))
+                leveraged_cents = max(opening, prev_buyer_cents, min(scheduled_cents, competing_cents - undercut))
+                price_cents = min(limits["buyerTarget"], leveraged_cents)
+                price_dec = _q2(price_cents / 100.0)
+                action = "offer"
                 comp_sar = competing_cents / 100.0
-                sched_sar = scheduled_cents / 100.0
-                message = (
-                    f"To compete with the {comp_sar:.2f} SAR offer from another seller, "
-                    f"I lowered my counteroffer from {sched_sar:.2f} SAR to {float(price_dec):.2f} SAR."
-                )
-                offer_conditions["leverage_applied"] = True
+                message = (f"Another seller in this request is offering {comp_sar:.2f} SAR. "
+                           f"I am proposing {float(price_dec):.2f} SAR — lower your price to stay competitive.")
                 offer_conditions["competing_offer"] = round(comp_sar, 2)
-                offer_conditions["scheduled_price"] = round(sched_sar, 2)
             else:
-                message = (
-                    "My opening counteroffer reflects the public listing price."
-                    if round_num == 1
-                    else "I can reduce my previous counteroffer for these terms."
-                )
+                price_cents = max(prev_buyer_cents, scheduled_cents)
+                price_dec = _q2(price_cents / 100.0)
+                action = "offer"
+                message = ("I am opening with a lower proposal for these terms." if round_num == 1
+                           else "I can increase my previous proposal to move the discussion forward.")
+        else:
+            round_num = last_offer.round_number if last_offer else 1
+            progress = 0.0 if limits["rounds"] == 1 else (round_num - 1) / (limits["rounds"] - 1)
+            target = max(limits["floor"], math.ceil(limits["asking"] * 0.95)) if scenario == "failed" else limits["floor"]
+            scheduled_cents = math.ceil(limits["asking"] + (target - limits["asking"]) * progress)
+            prev_seller_cents = min((_cents(o.price) for o in offers if o.offered_by == "seller"), default=limits["asking"])
+            scheduled_cents = min(scheduled_cents, prev_seller_cents)
+            price_cents = scheduled_cents
+            leverage_used = False
+            if competing_cents is not None and scenario != "failed" and competing_cents < scheduled_cents:
+                undercut = max(2500, math.floor(competing_cents * 0.02))
+                competitive_target = max(limits["floor"], competing_cents - undercut)
+                if competitive_target < scheduled_cents:
+                    price_cents = competitive_target
+                    leverage_used = True
+            offer_cents = _cents(last_offer.price) if last_offer else 0
+            agreed = offer_cents >= price_cents or (scenario != "failed" and offer_cents >= limits["threshold"])
+            if agreed and last_offer:
+                action = "accept"
+                price_dec = last_offer.price
+                message = "I accept the buyer's proposal and the proposed conditions."
+            else:
+                action = "counteroffer"
+                price_dec = _q2(price_cents / 100.0)
+                if leverage_used and competing_cents is not None:
+                    comp_sar = competing_cents / 100.0
+                    sched_sar = scheduled_cents / 100.0
+                    message = (f"To compete with the {comp_sar:.2f} SAR offer from another seller, "
+                               f"I lowered my counteroffer from {sched_sar:.2f} SAR to {float(price_dec):.2f} SAR.")
+                    offer_conditions.update(leverage_applied=True, competing_offer=round(comp_sar, 2),
+                                            scheduled_price=round(sched_sar, 2))
+                else:
+                    message = ("My opening counteroffer reflects the public listing price." if round_num == 1
+                               else "I can reduce my previous counteroffer for these terms.")
+
+    if neg_session.request_id is not None:
+        approved_action = "counter" if action == "counteroffer" else action
+        approved_decision = Decision(approved_action, price_dec, "Approved by the deterministic negotiation policy")
+        if agent == "buyer":
+            language_agent = BuyerAgent(BuyerContext(
+                target_price=Decimal(limits["buyerTarget"]) / 100,
+                maximum_price=Decimal(budget) / 100,
+            ))
+        else:
+            language_agent = SellerAgent(SellerContext(
+                asking_price=Decimal(limits["asking"]) / 100,
+                minimum_price=Decimal(limits["floor"]) / 100,
+            ))
+        message = language_agent.respond(approved_decision, message)
 
     if agreed and (_cents(price_dec) > budget or _cents(price_dec) < max(limits["floor"], floor)):
         return fail_session("The terms changed and this proposal is no longer available.")
