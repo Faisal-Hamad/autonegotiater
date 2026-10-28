@@ -103,6 +103,99 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Cause:** Podman processes the names in order. When it reached the first one, the second still depended on it.
 - **Fix:** Run `podman rm autoneg-nextjs-quarantine` again, or list the dependent container first.
 
+
+
+
+
+### 31. 
+
+# Production Deployment Issue – Stale Frontend Containers
+
+## Problem
+
+After pushing the latest AutoNegotiater changes to GitHub, the EC2 server repository was already on the newest commit:
+
+`223991c – Implement AI negotiation system and add project instructions`
+
+However, the public website was still showing the old frontend interface.
+
+The backend was updated correctly and already contained the new AI negotiation files, including:
+
+- `buyer_agent.py`
+- `seller_agent.py`
+- `engine.py`
+- `gemini_service.py`
+
+Gemini was also configured correctly on the production backend.
+
+## Root Cause
+
+The server had several old frontend and backend containers from previous staging and release deployments.
+
+The current production `autoneg-nextjs` container had been recreated, but it was still using an old frontend image created on October 21.
+
+Therefore:
+
+`Latest Git code ≠ Latest running frontend image`
+
+The source code on the server was current, but the frontend container image had not been rebuilt from that source.
+
+## Fix
+
+We rebuilt only the Next.js frontend image from the latest source code:
+
+```bash
+podman-compose -f infra/compose.yaml build --no-cache nextjs
+```
+
+Then recreated the frontend container:
+
+```bash
+podman-compose -f infra/compose.yaml up -d --force-recreate nextjs
+```
+
+Nginx was restarted afterward:
+
+```bash
+podman restart autoneg-nginx
+```
+
+The website then displayed the latest frontend correctly.
+
+## Container Cleanup
+
+Several old staging/release containers were also still running.
+
+They were stopped and removed after confirming they were not used by the production Nginx configuration.
+
+The final production stack was reduced to:
+
+```text
+autoneg-postgresql
+autoneg-redis
+autoneg-fastapi
+autoneg-celery
+autoneg-nextjs
+autoneg-nginx
+```
+
+## Result
+
+The production server now:
+
+- runs the latest frontend and backend
+- contains the new AI negotiation architecture
+- has Gemini configured
+- contains the expanded iPhone catalog
+- uses only the required production containers
+- no longer runs unnecessary old staging containers
+
+## Lesson Learned
+
+Pulling the latest Git commit is not enough when using containers.
+
+After code changes, the affected container image must also be rebuilt and the container recreated so the running application uses the latest source code.
+
 ---
 
 ## Backend
