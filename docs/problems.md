@@ -103,98 +103,19 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Cause:** Podman processes the names in order. When it reached the first one, the second still depended on it.
 - **Fix:** Run `podman rm autoneg-nextjs-quarantine` again, or list the dependent container first.
 
+### 36. Website shows the old frontend after the AI negotiation commit
+- **Problem:** After `223991c` (AI negotiation system), the server repository was on the latest commit and the backend had the new agent files, but the website still showed the old frontend.
+- **Cause:** `autoneg-nextjs` had been recreated from an old image built on October 21, so it did not run the current source. Pulling the code does not rebuild the image.
+- **Fix:** Rebuild the image and recreate the container, then restart nginx:
+  `podman-compose -f infra/compose.yaml build --no-cache nextjs`
+  `podman-compose -f infra/compose.yaml up -d --force-recreate nextjs`
+  `podman restart autoneg-nginx`
+  The old staging and release containers (`autoneg-integration-*`, `autoneg-nextjs-secure`, etc.) were also stopped. They were not removed and remain on the server in the `Exited` state, with restart policy `no`.
 
-
-
-
-### 31. 
-
-# Production Deployment Issue – Stale Frontend Containers
-
-## Problem
-
-After pushing the latest AutoNegotiater changes to GitHub, the EC2 server repository was already on the newest commit:
-
-`223991c – Implement AI negotiation system and add project instructions`
-
-However, the public website was still showing the old frontend interface.
-
-The backend was updated correctly and already contained the new AI negotiation files, including:
-
-- `buyer_agent.py`
-- `seller_agent.py`
-- `engine.py`
-- `gemini_service.py`
-
-Gemini was also configured correctly on the production backend.
-
-## Root Cause
-
-The server had several old frontend and backend containers from previous staging and release deployments.
-
-The current production `autoneg-nextjs` container had been recreated, but it was still using an old frontend image created on October 21.
-
-Therefore:
-
-`Latest Git code ≠ Latest running frontend image`
-
-The source code on the server was current, but the frontend container image had not been rebuilt from that source.
-
-## Fix
-
-We rebuilt only the Next.js frontend image from the latest source code:
-
-```bash
-podman-compose -f infra/compose.yaml build --no-cache nextjs
-```
-
-Then recreated the frontend container:
-
-```bash
-podman-compose -f infra/compose.yaml up -d --force-recreate nextjs
-```
-
-Nginx was restarted afterward:
-
-```bash
-podman restart autoneg-nginx
-```
-
-The website then displayed the latest frontend correctly.
-
-## Container Cleanup
-
-Several old staging/release containers were also still running.
-
-They were stopped and removed after confirming they were not used by the production Nginx configuration.
-
-The final production stack was reduced to:
-
-```text
-autoneg-postgresql
-autoneg-redis
-autoneg-fastapi
-autoneg-celery
-autoneg-nextjs
-autoneg-nginx
-```
-
-## Result
-
-The production server now:
-
-- runs the latest frontend and backend
-- contains the new AI negotiation architecture
-- has Gemini configured
-- contains the expanded iPhone catalog
-- uses only the required production containers
-- no longer runs unnecessary old staging containers
-
-## Lesson Learned
-
-Pulling the latest Git commit is not enough when using containers.
-
-After code changes, the affected container image must also be rebuilt and the container recreated so the running application uses the latest source code.
+### 37. Website down (Cloudflare 521) after the server was stopped and started
+- **Problem:** `https://autonegotiater.com` returned Cloudflare error `521`. SSH (port 22) worked, but ports 80 and 443 refused connections.
+- **Cause:** The EC2 instance was stopped, and all containers exited at the same time with codes `0` and `143` (normal shutdown). When the instance started again, the containers stayed down. Rootless Podman does not apply `restart: always` at boot unless the user's systemd services start at boot.
+- **Fix:** Start the stack with `podman-compose -f infra/compose.yaml up -d`. Right after the start, nginx returns `502` for a few seconds until FastAPI finishes its migrations. To start the containers on every boot, run `sudo loginctl enable-linger deploy` (as `ec2-user`) and `systemctl --user enable podman-restart.service` (as `deploy`). Check with `loginctl show-user deploy --property=Linger` and `systemctl --user is-enabled podman-restart.service`. Only the six project containers have the `always` policy, so the old test containers do not start.
 
 ---
 
