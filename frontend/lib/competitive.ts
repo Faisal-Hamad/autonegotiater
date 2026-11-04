@@ -154,7 +154,7 @@ export function competitiveView(session: CompetitiveSession, buyerId: number): C
         announcements: structuredClone(session.announcements), sellers: session.sellers.map(s => ({ catalogId: s.inventory.productKey, id: s.inventory.id, name: s.inventory.name, exactProduct: s.inventory.productKey === session.catalogId, startingPrice: s.inventory.startingPrice, stock: s.inventory.stock, deliveryDays: s.inventory.deliveryDays, participates: s.status !== "excluded", status: s.status, reason: s.reason, currentPrice: s.currentPrice, agreedPrice: s.agreedPrice, history: structuredClone(s.history) })) };
 }
 export function rankedOffers(view: CompetitiveView) {
-    return view.sellers.filter(s => s.status === "agreed" && s.exactProduct && s.stock >= view.requirements.quantity && s.deliveryDays <= view.requirements.deliveryDays && s.agreedPrice !== undefined && s.agreedPrice <= view.requirements.maximumPrice)
+    return view.sellers.filter(s => s.status === "agreed" && s.stock >= view.requirements.quantity && s.deliveryDays <= view.requirements.deliveryDays && s.agreedPrice !== undefined && s.agreedPrice <= view.requirements.maximumPrice)
         .sort((a, b) => a.agreedPrice! - b.agreedPrice! || a.deliveryDays - b.deliveryDays || a.id.localeCompare(b.id));
 }
 export function approveCompetitiveOffer(input: CompetitiveSession, sellerId: string, buyerId: number): CompetitiveSession {

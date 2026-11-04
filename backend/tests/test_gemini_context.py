@@ -19,6 +19,8 @@ def test_context_has_no_numbers_from_limits():
     text = GeminiService._context_text({"role": "buyer", "product": "Office Chair", "round": 6, "max_rounds": 6,
                                         "competing_quote": True})
     assert "buyer's negotiation agent" in text and "final round" in text and "another seller" in text
+    seller_text = GeminiService._context_text({"role": "seller", "competing_quote": True})
+    assert "Never mention other buyers" in seller_text
     assert not any(ch.isdigit() for ch in text)
 
 

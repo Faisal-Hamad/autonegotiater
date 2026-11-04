@@ -169,7 +169,9 @@ class GeminiService:
             stage = "opening" if round_number == 1 else "final" if round_number >= max_rounds else "middle"
             parts.append(f"This is the {stage} round of the negotiation.")
         if context.get("competing_quote"):
-            parts.append("Mention briefly that another seller made a competitive offer, without any amount or name.")
+            # Competition is always between sellers; the buyer is the same person in every conversation.
+            parts.append("You lowered your price because another seller offered the buyer a better price; say briefly that you are matching the competition, without any amount or name. Never mention other buyers."
+                         if role == "seller" else "Mention briefly that another seller made a competitive offer, without any amount or name.")
         return (" Context: " + " ".join(parts) + " Sound polite and human, vary the wording, no greetings.") if parts else ""
 
     @staticmethod

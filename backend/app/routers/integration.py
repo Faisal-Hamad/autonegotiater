@@ -92,7 +92,7 @@ async def start(body:Start,user=Depends(current_user),db=Depends(get_session)):
         if selected is not None:
             if item["product"]["id"] not in selected:continue
             p=await db.get(Product,item["product"]["id"]);rule=await db.scalar(select(SellerRule).where(SellerRule.product_id==p.id));floor=max(float(p.min_acceptable_price),float(rule.min_price) if rule else 0,float(p.base_price)*(1-float(rule.max_discount if rule else 0)/100))
-            sources.append({**item["listing"],"minimumPrice":cents(floor,True)/100,"exactProduct":item["product"]["id"]==product.id});continue
+            sources.append({**item["listing"],"minimumPrice":cents(floor,True)/100,"exactProduct":True});continue
         if (item["listing"]["matchKey"] if body.matchingPolicy=="model-storage-v1" else item["listing"]["catalogId"])!=key:continue
         p=await db.get(Product,item["product"]["id"]);rule=await db.scalar(select(SellerRule).where(SellerRule.product_id==p.id));floor=max(float(p.min_acceptable_price),float(rule.min_price) if rule else 0,float(p.base_price)*(1-float(rule.max_discount if rule else 0)/100))
         sources.append({**item["listing"],"minimumPrice":cents(floor,True)/100,"exactProduct":item["product"]["name"]==chosen["product"]["name"] and item["product"]["description"]==chosen["product"]["description"]})
