@@ -126,6 +126,11 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 - **Cause:** After the shared engine was introduced (commit `223991c`), `competitive_engine.py` created the Buyer Agent with `target_price=target` and no opening price. `buyer_decision` moves the offer from the opening price to the target, so the offer stayed at the target.
 - **Fix:** Create the Buyer Agent with `opening_price=target` and `target_price=maximum`, so the offer rises from the target to the maximum by the last round. Test `test_buyer_offer_rises_to_maximum` checks it.
 
+### 39. Every seller excluded with "Delivery not configured"
+- **Problem:** A multi-seller negotiation with 4 chosen listings showed "0 Sellers meet your quantity and delivery requirements", and the Start button stayed disabled. Earlier, only 2 of 9 iPhone sellers took part.
+- **Cause:** Listings created by the first seed data have no delivery setting in `web_integration_records`; only listings a seller saved from the new seller page have one. The engine excludes a seller whose delivery time is missing.
+- **Fix:** Listings without a delivery setting use `DEFAULT_DELIVERY_DAYS = 5` in `routers/integration.py`; the seller can still change it. Test `test_listing_without_delivery_setting_gets_default` checks it.
+
 ### 12. `pip` refuses to install `requirements.txt`
 - **Problem:** `pip install -r requirements.txt` failed with `requirements are unsatisfiable`.
 - **Cause:** `celery[redis]==5.5.3` needs `redis<=5.2.1`, but we had pinned `redis==6.2.0`.

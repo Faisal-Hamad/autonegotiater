@@ -155,3 +155,18 @@ def test_buyer_selected_different_products(data, login):
     r = buyer.post(f"/integration/attempts/{attempt['attemptId']}", json={"action": "approve", "sellerId": choice["id"]})
     assert r.status_code == 200, r.text
     assert r.json()["competitive"]["agreements"][0]["productId"] == samsung
+
+
+def test_listing_without_delivery_setting_gets_default(app_client, data):
+    """Listings created before sellers could set a delivery time are not excluded."""
+    from sqlalchemy import delete
+    from app.db import SessionLocal
+    from app.routers.integration import DEFAULT_DELIVERY_DAYS, records
+
+    async def drop_listing_settings():
+        async with SessionLocal() as db:
+            await db.execute(delete(records).where(records.c.kind == "listing"))
+            await db.commit()
+    app_client.portal.call(drop_listing_settings)
+    catalog = app_client.get("/integration/catalog").json()
+    assert all(item["listing"]["deliveryDays"] == DEFAULT_DELIVERY_DAYS for item in catalog)

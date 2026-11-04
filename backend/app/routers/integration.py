@@ -14,6 +14,8 @@ from app.competitive_engine import create,step,buyer_view,cents,now,seller_decid
 from app.product_identity import catalog_match_key
 from app.routers.workspace import build_workspace_state
 router=APIRouter(prefix="/integration",tags=["authenticated integration"])
+# Listings created before sellers could set a delivery time get this default; sellers can change it.
+DEFAULT_DELIVERY_DAYS=5
 records=Table("web_integration_records",Base.metadata,Column("id",String(100),primary_key=True),Column("kind",String(20),nullable=False),Column("owner_id",BigInteger,ForeignKey("users.id",ondelete="CASCADE"),nullable=False),Column("data",JSONB,nullable=False))
 async def load(db,kind):return (await db.execute(select(records).where(records.c.kind==kind))).mappings().all()
 async def catalog(db,private_owner=None):
@@ -22,7 +24,7 @@ async def catalog(db,private_owner=None):
     for p in products:
         m=meta.get(p.id,{});rule=rules.get(p.id);owner=users.get(p.seller_id)
         floor=max(float(p.min_acceptable_price),float(rule.min_price) if rule else 0,float(p.base_price)*(1-float(rule.max_discount if rule else 0)/100))
-        item={"id":str(p.id),"productId":p.id,"catalogId":str(m.get("catalogId",p.id)),"matchKey":catalog_match_key(p,products_by_id,meta),"productName":p.name,"name":f"{owner.first_name} {owner.last_name}".strip() if owner else "Seller unavailable","sellerId":p.seller_id,"startingPrice":float(p.base_price),"stock":p.stock_quantity,"deliveryDays":m.get("deliveryDays"),"enabled":bool(owner and owner.is_active and m.get("enabled",True)),"maxRounds":min(12,rule.max_rounds if rule else 6),"concession":m.get("concession",round(float(p.base_price)*.04,2)),"strategy":m.get("strategy","competitive"),"description":p.description,"imageUrl":p.image_url}
+        item={"id":str(p.id),"productId":p.id,"catalogId":str(m.get("catalogId",p.id)),"matchKey":catalog_match_key(p,products_by_id,meta),"productName":p.name,"name":f"{owner.first_name} {owner.last_name}".strip() if owner else "Seller unavailable","sellerId":p.seller_id,"startingPrice":float(p.base_price),"stock":p.stock_quantity,"deliveryDays":m.get("deliveryDays") or DEFAULT_DELIVERY_DAYS,"enabled":bool(owner and owner.is_active and m.get("enabled",True)),"maxRounds":min(12,rule.max_rounds if rule else 6),"concession":m.get("concession",round(float(p.base_price)*.04,2)),"strategy":m.get("strategy","competitive"),"description":p.description,"imageUrl":p.image_url}
         if private_owner==p.seller_id:item.update(minimumPrice=cents(floor,True)/100,declaredMinimumPrice=float(rule.min_price) if rule else float(p.min_acceptable_price),maximumDiscount=float(rule.max_discount) if rule else 0)
         product={"id":p.id,"seller_id":p.seller_id,"name":p.name,"description":p.description,"category":p.category,"base_price":str(p.base_price),"stock_quantity":p.stock_quantity,"image_url":p.image_url,"created_at":p.created_at.isoformat(),"catalog_id":item["catalogId"],"model_key":item["matchKey"]}
         out.append({"product":product,"listing":item})
