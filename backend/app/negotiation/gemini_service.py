@@ -113,7 +113,7 @@ class GeminiService:
         except (ValueError, TypeError, InvalidOperation, AttributeError):
             return None
 
-    def generate_response(self, *, action: str, price: Decimal, fallback: str) -> str:
+    def generate_response(self, *, action: str, price: Decimal, fallback: str, context: dict[str, Any] | None = None) -> str:
         """Phrase an already-approved action and price; never return a new price."""
         self.last_fallback_reason = None
         if action not in {"offer", "counter", "counteroffer", "accept", "reject"}:
@@ -130,11 +130,12 @@ class GeminiService:
 
         price_text = f"{approved:,.2f}"
         prompt = (
-            "Write one concise, natural negotiation reply in English. You are only "
-            "phrasing an approved action. Return JSON with exactly the fields "
+            "Write one concise, natural negotiation reply in English (one or two short sentences). "
+            "You are only phrasing an approved action. Return JSON with exactly the fields "
             '"message" (string) and "price" (number). The price must exactly '
-            f"equal {price_text}; do not change it or add any other amounts. "
+            f"equal {price_text}; do not change it, and do not write any other number or amount. "
             f"Approved action: {action}. Approved price: {price_text} SAR."
+            + self._context_text(context)
         )
         schema = {
             "type": "OBJECT",
@@ -150,6 +151,26 @@ class GeminiService:
         if raw is None:
             return fallback
         return json.loads(raw)["message"].strip()[:500]
+
+    @staticmethod
+    def _context_text(context: dict[str, Any] | None) -> str:
+        """Public conversation context only (role, product, round); never private price limits."""
+        if not context:
+            return ""
+        parts = []
+        role = context.get("role")
+        if role in {"buyer", "seller"}:
+            parts.append(f"You speak as the {role}'s negotiation agent, addressing the {'seller' if role == 'buyer' else 'buyer'}.")
+        product = context.get("product")
+        if isinstance(product, str) and product.strip():
+            parts.append(f"Product: {product.strip()[:120]}. Refer to it briefly without its model number or storage size (for example 'the iPhone' or 'the phone').")
+        round_number, max_rounds = context.get("round"), context.get("max_rounds")
+        if isinstance(round_number, int) and isinstance(max_rounds, int):
+            stage = "opening" if round_number == 1 else "final" if round_number >= max_rounds else "middle"
+            parts.append(f"This is the {stage} round of the negotiation.")
+        if context.get("competing_quote"):
+            parts.append("Mention briefly that another seller made a competitive offer, without any amount or name.")
+        return (" Context: " + " ".join(parts) + " Sound polite and human, vary the wording, no greetings.") if parts else ""
 
     @staticmethod
     def _valid_intent(raw: str) -> bool:

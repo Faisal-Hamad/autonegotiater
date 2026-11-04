@@ -48,12 +48,13 @@ class SellerAgent:
             competing_price=competing_price,
         ))
 
-    def respond(self, decision: Decision, fallback: str) -> str:
+    def respond(self, decision: Decision, fallback: str, context: dict | None = None) -> str:
         """Phrase an approved decision without sharing private seller context."""
         if decision.price is None:
             return fallback
         return self.language.generate_response(
             action=decision.action, price=decision.price, fallback=fallback,
+            **({"context": {**context, "role": "seller"}} if context else {}),
         )
 
     def parse_intent(self, text: str) -> dict | None:

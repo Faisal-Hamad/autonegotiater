@@ -107,7 +107,9 @@ async def action(rid:str,body:Action,user=Depends(current_user),db=Depends(get_s
     if not rec:raise HTTPException(404,"Session unavailable.")
     if user["role"]!="buyer" or rec["owner_id"]!=user["id"]:raise HTTPException(403,"Only the owning Buyer can act on this session.")
     e=deepcopy(rec["data"])
-    if body.action=="advance":e=step(e)
+    if body.action=="advance":
+        # Pressing Next round is an explicit request for one round, so it also ends a pause.
+        e["paused"]=False;e=step(e)
     elif body.action=="archive":
         if e["phase"]=="running" or e["phase"]=="review" and any(s["status"]=="agreed" for s in e["sellers"]):raise HTTPException(409,"Cancel or finalize the current attempt first.")
         e["archived"]=True

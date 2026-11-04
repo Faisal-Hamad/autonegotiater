@@ -77,6 +77,8 @@ def step(engine):
         limit=min(r["maxRounds"],s.get("maxRounds",r["maxRounds"]))
         if n>limit: s.update(status="declined",reason="Maximum rounds exhausted"); continue
         floor=cents(s["minimumPrice"],True); maximum=cents(r["maximumPrice"])
+        # Public context for the language model only; private price limits are never included.
+        ctx={"product":s.get("productName") or e["productName"],"round":n,"max_rounds":limit}
         history=s["history"]
         def message(agent,action,price,text): history.append({"round":n,"agent":agent,"action":action,"price":price/100,"explanation":text,"timestamp":now()})
         # The buyer opens at the target price and concedes towards the maximum by the last round.
@@ -94,11 +96,11 @@ def step(engine):
             price=cents(buyer.price)
             if floor<=price<=maximum:
                 fallback="I accept your current counteroffer for the requested quantity and delivery."
-                message("Buyer Agent","accept",price,buyer_agent.respond(buyer,fallback))
+                message("Buyer Agent","accept",price,buyer_agent.respond(buyer,fallback,ctx))
                 s.update(status="agreed",agreedPrice=price/100,reason="Both Agents accepted the same price");continue
         offer=cents(buyer.price)
         fallback="Opening target offer." if n==1 else "I can improve my offer within the authorized purchase limits."
-        message("Buyer Agent","offer",offer,buyer_agent.respond(buyer,fallback))
+        message("Buyer Agent","offer",offer,buyer_agent.respond(buyer,fallback,ctx))
         starting=cents(s["startingPrice"]); concession=max(1,cents(s.get("concession",max(0.01,s["startingPrice"]*.04))))
         competitor=min((cents(p) for key,p in prior.items() if key!=s["id"]),default=None)
         seller_agent=SellerAgent(SellerContext(
@@ -121,10 +123,10 @@ def step(engine):
         if seller.action=="accept":
             if not floor<=offer<=maximum: raise ValueError("Agreement boundaries violated")
             fallback="I accept the Buyer Agent offer and the requested quantity and delivery."
-            message("Seller Agent","accept",offer,seller_agent.respond(seller,fallback))
+            message("Seller Agent","accept",offer,seller_agent.respond(seller,fallback,ctx))
             s.update(currentPrice=offer/100,agreedPrice=offer/100,status="agreed",reason="Both Agents accepted the same price")
         else:
-            message("Seller Agent","counteroffer",counter,seller_agent.respond(seller,explanation));s.update(currentPrice=counter/100,status="negotiating",reason="Negotiating")
+            message("Seller Agent","counteroffer",counter,seller_agent.respond(seller,explanation,{**ctx,"competing_quote":explanation.startswith("I improved")}));s.update(currentPrice=counter/100,status="negotiating",reason="Negotiating")
             if r.get("mode","semi_automated")=="semi_automated" and offer>=maximum and counter>maximum:
                 # The buyer reached its last point: hand the decision to the human seller.
                 history.append({"round":n,"agent":"System","action":"seller_review","price":offer/100,"explanation":"The buyer reached their final offer. The seller was notified to accept or reject it.","timestamp":now()})
@@ -132,7 +134,7 @@ def step(engine):
             elif n==limit:
                 if counter<=maximum:
                     approved=Decision("accept",Decimal(counter)/100,"Final counteroffer is within the authorized requirements")
-                    message("Buyer Agent","accept",counter,buyer_agent.respond(approved,"I accept the final counteroffer within the authorized requirements."))
+                    message("Buyer Agent","accept",counter,buyer_agent.respond(approved,"I accept the final counteroffer within the authorized requirements.",ctx))
                     s.update(agreedPrice=counter/100,status="agreed",reason="Both Agents accepted the same price")
                 else:s.update(status="declined",reason="No price within both parties limits before the round limit")
     eligible=[s for s in e["sellers"] if s["participates"] and s.get("currentPrice") is not None]

@@ -74,7 +74,9 @@ The buyer requirements used in the tests are: target 3,080 SAR, maximum 3,657.50
 
 ### 2.4 Engine unit tests (`test_competitive_engine.py`, `test_shared_negotiation_engine.py`, `test_negotiation_agents.py`, `test_gemini_service.py`, `test_product_identity.py`, `test_workspace_negotiation.py`)
 
-These check, among others: price boundaries for many budgets and round limits (no agent ever offers outside its own limits), anonymous competition, removal of private limits from the buyer view, pause and final states, rejection of invalid requirements, that inputs are never modified, the semi-automated seller decision (accept, reject, owner check, only once), that Gemini text is rejected when it changes the approved price, and model/storage matching.
+`test_gemini_context.py` (TC-AI) checks that the language model only receives public context (role, product, round stage, whether a competing quote exists) and never a private price limit.
+
+The engine tests check, among others: price boundaries for many budgets and round limits (no agent ever offers outside its own limits), anonymous competition, removal of private limits from the buyer view, pause and final states, rejection of invalid requirements, that inputs are never modified, the semi-automated seller decision (accept, reject, owner check, only once), that Gemini text is rejected when it changes the approved price, and model/storage matching.
 
 ### 2.5 End-to-end browser tests (`e2e/test_e2e.py`)
 
@@ -84,7 +86,7 @@ These check, among others: price boundaries for many budgets and round limits (n
 | TC-E2E-02 | Open the buyer dashboard without signing in | "Sign in required" |
 | TC-E2E-03 | Buyer opens the admin dashboard | "does not have this role" |
 | TC-E2E-04 | Buyer uses "Buy now" on a product | Redirected to agreements; "Direct purchase · No negotiation" shown |
-| TC-E2E-05 | Full semi-automated negotiation: buyer starts, Seller B is notified, opens the session from the notification, accepts; buyer selects Seller B and confirms | "Recorded Agreement: Seller B" shown |
+| TC-E2E-05 | Full semi-automated negotiation: buyer starts and presses Next round six times, Seller B is notified, opens the session from the notification, accepts; buyer selects Seller B and confirms | "Recorded Agreement: Seller B" shown |
 | TC-E2E-06 | Admin opens Reports, downloads the platform summary as CSV, opens a seller report | KPI tiles shown, CSV file downloaded, preview shown |
 | TC-E2E-07 | Buyer opens the profile: the account type is shown, the password section is collapsed; the buyer opens it and changes the password | "Buyer account" badge; "Your password was changed." |
 | TC-E2E-09 | Buyer presses "+ Multi-seller negotiation" on 2 products in the marketplace and starts | The bar shows "1 of 5" with the button disabled, then "2 of 5"; the product page says "You chose these 2 listings"; the negotiation ends with agreements to compare |
@@ -96,7 +98,7 @@ Latest local run (4 November 2026):
 
 | Suite | Tests | Result |
 |---|---|---|
-| Backend unit + API (`backend/tests`) | 98 | 98 passed |
+| Backend unit + API (`backend/tests`) | 101 | 101 passed |
 | End-to-end (`e2e`) | 9 | 9 passed |
 | Backend line coverage | 2,035 statements | 52% overall; `competitive_engine.py` 100%, `engine.py` 90%, agents 91–92%, `integration_auth.py` 72% |
 

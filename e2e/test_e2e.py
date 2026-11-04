@@ -40,8 +40,14 @@ def test_semi_automated_negotiation_with_seller_decision(sign_in):
     buyer.get_by_role("radio", name=re.compile("Semi-automated")).check()
     buyer.get_by_role("button", name="Start Multi-Seller Negotiation").click()
     buyer.wait_for_url(re.compile(r"/products/\d+/competitive"))
-    # The Buyer Agent reaches its maximum price; Seller B must decide.
-    expect(buyer.get_by_text(re.compile("Waiting for Seller B"))).to_be_visible(timeout=30000)
+    # Semi-automated mode runs one round at a time: the buyer presses Next round after reading each round.
+    expect(buyer.get_by_role("button", name="Run round 1 →")).to_be_visible()
+    for round_number in range(1, 7):
+        button = buyer.get_by_role("button", name=re.compile(r"^(Run round 1|Next round)"))
+        button.click()
+        expect(buyer.get_by_text(re.compile(f"Round {round_number} of 6"))).to_be_visible(timeout=15000)
+    # The Buyer Agent reached its maximum price; Seller B must decide.
+    expect(buyer.get_by_text(re.compile("Waiting for Seller B"))).to_be_visible(timeout=15000)
 
     seller = sign_in("seller_b")
     seller.goto("/notifications")

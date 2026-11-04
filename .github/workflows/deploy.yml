@@ -24,7 +24,7 @@ jobs:
           POSTGRES_DB: autoneg_test
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U autoneg" --health-interval 5s --health-timeout 3s --health-retries 10
+          --health-cmd "pg_isready -U autoneg -d autoneg_test" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
       DATABASE_URL: postgresql+asyncpg://autoneg:autoneg@localhost:5432/autoneg_test
     defaults:
@@ -62,7 +62,7 @@ jobs:
           POSTGRES_DB: autoneg_e2e
         ports: ["5432:5432"]
         options: >-
-          --health-cmd "pg_isready -U autoneg" --health-interval 5s --health-timeout 3s --health-retries 10
+          --health-cmd "pg_isready -U autoneg -d autoneg_e2e" --health-interval 5s --health-timeout 3s --health-retries 10
     env:
       DATABASE_URL: postgresql+asyncpg://autoneg:autoneg@localhost:5432/autoneg_e2e
       AUTH_COOKIE_SECURE: "false"
