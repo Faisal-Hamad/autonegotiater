@@ -744,9 +744,9 @@ async def update_user_profile(
         raise HTTPException(status_code=404, detail="User not found")
 
     email = payload.email.strip().lower()
-    conflict = await session.scalar(select(User.id).where(func.lower(User.email) == email, User.id != user_id))
-    if conflict:
-        raise HTTPException(status_code=400, detail="Email is already used by another account.")
+    if email != user.email:
+        # Changing the sign-in email needs the current password: POST /auth/email.
+        raise HTTPException(status_code=400, detail="Use Change email to change your email address.")
 
     parts = payload.name.strip().split(None, 1)
     user.first_name = (parts[0] if parts else user.first_name)[:50]

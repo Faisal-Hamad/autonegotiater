@@ -34,12 +34,13 @@ async def reset_and_seed():
         await db.flush()
         # Two listings of the same model and storage, so they compete in one negotiation.
         listings = [
-            ("seller_a", "3850.00", "3500.00", 5),   # floor below the buyer maximum: agents agree
-            ("seller_b", "4200.00", "3900.00", 3),   # floor above the buyer maximum: buyer hits the last point
+            ("seller_a", "iPhone 15 Pro 256GB - Natural Titanium", "3850.00", "3500.00", 5),   # agents agree
+            ("seller_b", "iPhone 15 Pro 256GB - Natural Titanium", "4200.00", "3900.00", 3),   # buyer hits the last point
+            ("seller_a", "Samsung Galaxy S24 Ultra 256GB Titanium Gray", "3600.00", "3300.00", 4),  # a different model
         ]
         products = {}
-        for owner, price, floor, stock in listings:
-            product = Product(seller_id=users[owner].id, name="iPhone 15 Pro 256GB - Natural Titanium",
+        for owner, name, price, floor, stock in listings:
+            product = Product(seller_id=users[owner].id, name=name,
                               description="Test listing", category="Electronics", base_price=Decimal(price),
                               min_acceptable_price=Decimal(floor), stock_quantity=stock)
             db.add(product)
@@ -52,7 +53,8 @@ async def reset_and_seed():
                       "concession": float(Decimal(price) * Decimal("0.04")), "strategy": "competitive",
                       "enabled": True},
             ))
-            products[owner] = product.id
+            products.setdefault(owner, product.id)
+            products[f"product_{product.id}"] = product.id
         await db.commit()
         return {k: v.id for k, v in users.items()}, products
 

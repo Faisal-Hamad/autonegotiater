@@ -128,3 +128,30 @@ def test_privacy_buyer_and_seller_views(data, login):
     seller_view = seller_a.get("/integration/workspace").json()["competitive"]
     assert "maximumPrice" not in json.dumps(seller_view["sellerSessions"])   # seller never sees the buyer budget
     assert all(s["sellerAccountId"] == data["users"]["seller_a"] for s in seller_view["sellerSessions"])
+
+
+def test_buyer_selected_listings_must_be_two_to_five(data, login):
+    buyer = login("buyer")
+    pid = data["products"]["seller_a"]
+    for ids in [[pid], [pid, 2, 3, 4, 5, 6], [2, 3]]:
+        r = buyer.post("/integration/attempts", json={"productId": pid, "requirements": {**REQ, "mode": "automated"},
+                                                      "matchingPolicy": "buyer-selected", "productIds": ids})
+        assert r.status_code in (400, 404), ids
+
+
+def test_buyer_selected_different_products(data, login):
+    """Option B: the buyer negotiates with listings of different models at the same time."""
+    buyer = login("buyer")
+    phone, samsung = data["products"]["product_1"], data["products"]["product_3"]
+    r = buyer.post("/integration/attempts", json={"productId": phone, "requirements": {**REQ, "mode": "automated"},
+                                                  "matchingPolicy": "buyer-selected", "productIds": [phone, samsung]})
+    assert r.status_code == 200, r.text
+    attempt = r.json()["competitive"]["attempts"][-1]
+    assert sorted(s["productId"] for s in attempt["sellers"]) == [phone, samsung]   # Seller B's iPhone is not included
+    attempt = run_rounds(buyer, attempt["attemptId"])
+    agreed = [s for s in attempt["sellers"] if s["status"] == "agreed"]
+    assert agreed
+    choice = next(s for s in agreed if s["productId"] == samsung)
+    r = buyer.post(f"/integration/attempts/{attempt['attemptId']}", json={"action": "approve", "sellerId": choice["id"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["competitive"]["agreements"][0]["productId"] == samsung

@@ -18,6 +18,7 @@ The test accounts and listings come from `backend/tests/seed_data.py`: buyers `b
 |---|---|---|---|
 | Seller A | 3,850 SAR | 3,500 SAR | Minimum below the buyer's maximum: the agents agree |
 | Seller B | 4,200 SAR | 3,900 SAR | Minimum above the buyer's maximum: the buyer reaches its last point |
+| Seller A (Samsung Galaxy S24 Ultra) | 3,600 SAR | 3,300 SAR | A different model, for negotiations with listings the buyer picks |
 
 The buyer requirements used in the tests are: target 3,080 SAR, maximum 3,657.50 SAR, 6 rounds, delivery within 7 days. Gemini is disabled in tests (no API key), so the agents use their fixed fallback text and the results are repeatable.
 
@@ -40,6 +41,8 @@ The buyer requirements used in the tests are: target 3,080 SAR, maximum 3,657.50
 | TC-AUTH-11 | Change password | Wrong current password; short new password; valid change | 400; 422; 200, other sessions signed out, old password stops working |
 | TC-AUTH-12 | Suspension | Admin suspends a signed-in buyer | The buyer's next request returns 401 and sign-in fails |
 | TC-AUTH-13 | Only admin suspends | Buyer tries to suspend another user | 403 |
+| TC-AUTH-14 | Change email | Wrong password; email of another account; invalid email; valid change | 400, 400, 400; then 200, the old email no longer signs in and the new one does |
+| TC-AUTH-15 | Email changes need the password | Change the email through the profile endpoint without a password | 400; changing only the name works |
 
 ### 2.2 Negotiation, semi-automated mode and privacy (API, `test_negotiation_api.py`)
 
@@ -55,6 +58,8 @@ The buyer requirements used in the tests are: target 3,080 SAR, maximum 3,657.50
 | TC-NEG-08 | Automated mode | Run all rounds in automated mode | No seller decision; Seller B `declined`, Seller A `agreed` |
 | TC-NEG-09 | Approval records a deal | Approve Seller A; then try to cancel | Agreement at the agreed price, stock reduced by 1; cancel returns 409 |
 | TC-NEG-10 | Session ownership | Another buyer advances the session | 403 |
+| TC-NEG-12 | The buyer picks 2 to 5 listings | Start with 1 listing, 6 listings, or a list without the main product | 400 or 404 |
+| TC-NEG-13 | Negotiate with chosen listings of different models | Pick the iPhone of Seller A and the Samsung; run all rounds; approve the Samsung | Only the 2 chosen listings negotiate (not Seller B); the agreement is for the Samsung |
 | TC-NEG-11 | Privacy between roles | Buyer and seller read their workspaces | Buyer never sees seller minimums; seller never sees the buyer maximum or other sellers' sessions |
 
 ### 2.3 Direct purchase without negotiation (API, `test_buy_now_api.py`)
@@ -81,16 +86,18 @@ These check, among others: price boundaries for many budgets and round limits (n
 | TC-E2E-04 | Buyer uses "Buy now" on a product | Redirected to agreements; "Direct purchase · No negotiation" shown |
 | TC-E2E-05 | Full semi-automated negotiation: buyer starts, Seller B is notified, opens the session from the notification, accepts; buyer selects Seller B and confirms | "Recorded Agreement: Seller B" shown |
 | TC-E2E-06 | Admin opens Reports, downloads the platform summary as CSV, opens a seller report | KPI tiles shown, CSV file downloaded, preview shown |
-| TC-E2E-07 | Buyer changes the password from the profile | "Your password was changed." |
+| TC-E2E-07 | Buyer opens the profile: the account type is shown, the password section is collapsed; the buyer opens it and changes the password | "Buyer account" badge; "Your password was changed." |
+| TC-E2E-09 | Buyer presses "+ Multi-seller negotiation" on 2 products in the marketplace and starts | The bar shows "1 of 5" with the button disabled, then "2 of 5"; the product page says "You chose these 2 listings"; the negotiation ends with agreements to compare |
+| TC-E2E-08 | Seller changes the sign-in email from the profile with the current password | "Seller account" badge; the new email is shown |
 
 ## 3. Results
 
-Latest local run (3 November 2026):
+Latest local run (4 November 2026):
 
 | Suite | Tests | Result |
 |---|---|---|
-| Backend unit + API (`backend/tests`) | 94 | 94 passed |
-| End-to-end (`e2e`) | 7 | 7 passed |
+| Backend unit + API (`backend/tests`) | 98 | 98 passed |
+| End-to-end (`e2e`) | 9 | 9 passed |
 | Backend line coverage | 2,035 statements | 52% overall; `competitive_engine.py` 100%, `engine.py` 90%, agents 91–92%, `integration_auth.py` 72% |
 
 The lowest coverage is in `routers/workspace.py` (26%), the older one-to-one API that the new interface no longer calls for multi-seller negotiation. In GitHub Actions, the coverage report (HTML), the JUnit XML results and screenshots of any failed browser test are saved as artifacts of every run.

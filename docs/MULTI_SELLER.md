@@ -6,7 +6,7 @@ Following the supervisor's feedback, the main negotiation flow is **one buyer ne
 
 1. **Select:**
    - **1-Click Category Selection (`/products/<id>`):** On any product page, the buyer can press **Negotiate with N competing sellers in `<Category>`** to automatically select up to 5 competing listings in the same category and start immediately.
-   - **Custom Selection (`/products`):** Or in the marketplace, the buyer presses **Add to multi-seller negotiation** on 2 to 5 listings that would all satisfy them, then **Negotiate with these sellers** in the bar at the bottom of the screen.
+   - **Custom Selection (`/products`):** Or in the marketplace, the buyer presses **+ Multi-seller negotiation** on 2 to 5 listings that would all satisfy them (they can be different models), then **Negotiate with these N sellers** in the bar at the bottom of the screen. The product page opens with only those listings (`/products/<id>?select=1,2,3`), and the negotiation starts with `matchingPolicy: "buyer-selected"` and `productIds`. The server rejects fewer than 2 or more than 5 listings.
 2. **Configure (`/negotiate?products=1,2,3`):** The buyer ranks the listings (most preferred first) and sets:
    - one private **maximum budget** for any of the listings;
    - **what matters most**: lowest price (weight 0.8), balanced (0.5) or preferred listing (0.2);

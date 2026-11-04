@@ -103,3 +103,26 @@ def test_only_admin_can_suspend(data, login):
     r = login("buyer").post("/integration/changes", json={"kind": "account_status",
                                                           "reference": data["users"]["buyer2"], "data": {"active": False}})
     assert r.status_code == 403
+
+
+def test_change_email(data, login):
+    buyer = login("buyer")
+    assert buyer.post("/auth/email", json={"currentPassword": "wrong", "newEmail": "new@test.local"}).status_code == 400
+    assert buyer.post("/auth/email", json={"currentPassword": PASSWORD, "newEmail": "seller_a@test.local"}).status_code == 400
+    assert buyer.post("/auth/email", json={"currentPassword": PASSWORD, "newEmail": "not-an-email"}).status_code == 400
+    r = buyer.post("/auth/email", json={"currentPassword": PASSWORD, "newEmail": "New.Buyer@Test.local"})
+    assert r.status_code == 200 and r.json()["email"] == "new.buyer@test.local"
+    assert buyer.get("/auth/me").json()["email"] == "new.buyer@test.local"
+    with TestClient(app, headers=ORIGIN) as client:
+        assert client.post("/auth/login", json={"email": "buyer@test.local", "password": PASSWORD}).status_code == 401
+        assert client.post("/auth/login", json={"email": "new.buyer@test.local", "password": PASSWORD}).status_code == 200
+
+
+def test_profile_update_cannot_change_email_without_password(data, login):
+    buyer = login("buyer")
+    uid = data["users"]["buyer"]
+    r = buyer.put(f"/workspace/users/{uid}", json={"name": "Renamed Buyer", "email": "other@test.local"})
+    assert r.status_code == 400
+    r = buyer.put(f"/workspace/users/{uid}", json={"name": "Renamed Buyer", "email": "buyer@test.local"})
+    assert r.status_code == 200
+    assert buyer.get("/auth/me").json()["name"] == "Renamed Buyer"

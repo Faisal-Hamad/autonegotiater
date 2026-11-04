@@ -70,20 +70,33 @@ async def workspace(user=Depends(current_user),db=Depends(get_session)):return a
 class Start(BaseModel):
     productId:int
     requirements:dict
-    matchingPolicy:Literal["exact-catalog","model-storage-v1"]="exact-catalog"
+    matchingPolicy:Literal["exact-catalog","model-storage-v1","buyer-selected"]="exact-catalog"
+    # Option B: the buyer picks 2 to 5 listings they would all accept.
+    productIds:list[int]|None=None
 @router.post("/attempts")
 async def start(body:Start,user=Depends(current_user),db=Depends(get_session)):
     if user["role"]!="buyer":raise HTTPException(403,"Only a Buyer can start negotiations.")
     product=await db.get(Product,body.productId)
     if not product:raise HTTPException(404,"Product unavailable.")
     public=await catalog(db);chosen=next(x for x in public if x["product"]["id"]==product.id);key=chosen["listing"]["matchKey"] if body.matchingPolicy=="model-storage-v1" else chosen["listing"]["catalogId"];sources=[]
+    selected=None
+    if body.matchingPolicy=="buyer-selected":
+        selected=list(dict.fromkeys(body.productIds or []))
+        if not 2<=len(selected)<=5:raise HTTPException(400,"Choose between 2 and 5 listings.")
+        if product.id not in selected:raise HTTPException(400,"The main product must be one of the selected listings.")
+        known={x["product"]["id"] for x in public}
+        if any(pid not in known for pid in selected):raise HTTPException(404,"A selected listing is unavailable.")
     for item in public:
+        if selected is not None:
+            if item["product"]["id"] not in selected:continue
+            p=await db.get(Product,item["product"]["id"]);rule=await db.scalar(select(SellerRule).where(SellerRule.product_id==p.id));floor=max(float(p.min_acceptable_price),float(rule.min_price) if rule else 0,float(p.base_price)*(1-float(rule.max_discount if rule else 0)/100))
+            sources.append({**item["listing"],"minimumPrice":cents(floor,True)/100,"exactProduct":item["product"]["id"]==product.id});continue
         if (item["listing"]["matchKey"] if body.matchingPolicy=="model-storage-v1" else item["listing"]["catalogId"])!=key:continue
         p=await db.get(Product,item["product"]["id"]);rule=await db.scalar(select(SellerRule).where(SellerRule.product_id==p.id));floor=max(float(p.min_acceptable_price),float(rule.min_price) if rule else 0,float(p.base_price)*(1-float(rule.max_discount if rule else 0)/100))
         sources.append({**item["listing"],"minimumPrice":cents(floor,True)/100,"exactProduct":item["product"]["name"]==chosen["product"]["name"] and item["product"]["description"]==chosen["product"]["description"]})
     try:e=create(chosen["product"],user["id"],body.requirements,sources)
     except (ValueError,TypeError) as exc:raise HTTPException(400,str(exc))
-    e["product"]=chosen["product"];e["catalogId"]=chosen["listing"]["catalogId"];e["matchKey"]=key if body.matchingPolicy=="model-storage-v1" else None;e["matchingPolicy"]=body.matchingPolicy;rid="NEG-"+uuid.uuid4().hex
+    e["product"]=chosen["product"];e["catalogId"]=chosen["listing"]["catalogId"];e["matchKey"]=key if body.matchingPolicy=="model-storage-v1" else None;e["matchingPolicy"]=body.matchingPolicy;e["selectedProductIds"]=selected;rid="NEG-"+uuid.uuid4().hex
     await db.execute(insert(records).values(id=rid,kind="attempt",owner_id=user["id"],data=e));db.add(AuditLog(user_id=user["id"],action="competitive_started",details={"attempt_id":rid}));await db.commit();return await payload(db,user)
 class Action(BaseModel):
     action:str
@@ -112,7 +125,7 @@ async def action(rid:str,body:Action,user=Depends(current_user),db=Depends(get_s
         if not s:raise HTTPException(400,"Select an eligible mutually accepted offer.")
         p=await db.scalar(select(Product).where(Product.id==s["productId"]).with_for_update());rule=await db.scalar(select(SellerRule).where(SellerRule.product_id==p.id)) if p else None
         seller=await db.get(User,s["sellerId"]);latest=next((x["listing"] for x in await catalog(db,s["sellerId"]) if x["product"]["id"]==s["productId"]),None);price=s["agreedPrice"];r=e["requirements"]
-        if not p or not seller or not seller.is_active or p.stock_quantity<r["quantity"] or not latest or not latest["enabled"] or (latest["matchKey"]!=e["matchKey"] if e.get("matchKey") else latest["catalogId"]!=e["catalogId"]) or (s.get("productName") is not None and (p.name!=s["productName"] or p.description!=s.get("description"))) or not latest["deliveryDays"] or latest["deliveryDays"]>r["deliveryDays"] or not (s.get("sellerDecision")=="accept" or max(s["minimumPrice"],latest["minimumPrice"])<=price) or price>r["maximumPrice"] or not s["history"] or s["history"][-1]["action"]!="accept" or s["history"][-1]["price"]!=price:raise HTTPException(409,"Listing availability or terms changed. Start another negotiation.")
+        if not p or not seller or not seller.is_active or p.stock_quantity<r["quantity"] or not latest or not latest["enabled"] or (s["productId"] not in (e.get("selectedProductIds") or []) if e.get("matchingPolicy")=="buyer-selected" else latest["matchKey"]!=e["matchKey"] if e.get("matchKey") else latest["catalogId"]!=e["catalogId"]) or (s.get("productName") is not None and (p.name!=s["productName"] or p.description!=s.get("description"))) or not latest["deliveryDays"] or latest["deliveryDays"]>r["deliveryDays"] or not (s.get("sellerDecision")=="accept" or max(s["minimumPrice"],latest["minimumPrice"])<=price) or price>r["maximumPrice"] or not s["history"] or s["history"][-1]["action"]!="accept" or s["history"][-1]["price"]!=price:raise HTTPException(409,"Listing availability or terms changed. Start another negotiation.")
         canonical=NegotiationSession(buyer_id=user["id"],product_id=p.id,status="completed",mode=r.get("mode","semi_automated"),max_budget=Decimal(str(r["maximumPrice"])),round_count=e["round"])
         db.add(canonical);await db.flush();p.stock_quantity-=r["quantity"]
         for m in s["history"]:

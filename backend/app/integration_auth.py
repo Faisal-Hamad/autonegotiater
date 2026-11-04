@@ -7,7 +7,7 @@ from fastapi import APIRouter,Request,Response,HTTPException,Depends
 from pydantic import BaseModel,Field
 from sqlalchemy import Table,Column,String,BigInteger,DateTime,ForeignKey,select,insert,delete
 from app.db import Base,SessionLocal,get_session
-from app.models import User
+from app.models import AuditLog,User
 from app.security import verify_password,hash_password
 router=APIRouter(prefix="/auth",tags=["authentication"])
 COOKIE="autoneg_session"
@@ -90,6 +90,25 @@ async def change_password(payload:PasswordChange,request:Request,user=Depends(cu
     token=request.cookies.get(COOKIE,"");current=hashlib.sha256(token.encode()).hexdigest()
     await db.execute(delete(sessions).where(sessions.c.user_id==u.id,sessions.c.token_hash!=current))
     await db.commit();return {"ok":True}
+class EmailChange(BaseModel):
+    currentPassword:str=Field(min_length=1,max_length=256)
+    newEmail:str=Field(min_length=3,max_length=100)
+@router.post("/email")
+async def change_email(payload:EmailChange,request:Request,user=Depends(current_user),db=Depends(get_session)):
+    """Change the sign-in email; the current password confirms it is the account owner."""
+    check_origin(request)
+    u=await db.get(User,user["id"])
+    try:valid=verify_password(payload.currentPassword,u.password_hash)
+    except Exception:valid=False
+    if not valid:raise HTTPException(400,"The current password is incorrect.")
+    email=payload.newEmail.strip().lower()
+    local,_,domain=email.partition("@")
+    if not local or "." not in domain or " " in email:raise HTTPException(400,"Enter a valid email address.")
+    if email==u.email:raise HTTPException(400,"This is already your email address.")
+    if await db.scalar(select(User.id).where(User.email==email,User.id!=u.id)):raise HTTPException(400,"This email is already used by another account.")
+    old=u.email;u.email=email
+    db.add(AuditLog(user_id=u.id,action="email_changed",details={"old_email":old,"new_email":email}))
+    await db.commit();return public_user(u)
 @router.post("/logout")
 async def logout(request:Request,response:Response,db=Depends(get_session)):
     check_origin(request);token=request.cookies.get(COOKIE,"")

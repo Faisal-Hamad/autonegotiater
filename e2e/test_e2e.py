@@ -70,12 +70,48 @@ def test_admin_platform_report(sign_in):
     expect(page.get_by_text(re.compile("Preview and download"))).to_be_visible()
 
 
-def test_change_password(sign_in):
+def test_profile_shows_account_type_and_changes_password(sign_in):
     page = sign_in("buyer2")
     page.goto("/profile")
+    expect(page.get_by_label("Account type: Buyer")).to_be_visible()
     form = page.get_by_role("form", name="Change password")
+    expect(form).to_be_hidden()                      # collapsed until opened
+    page.get_by_text("Change password", exact=True).first.click()
     form.get_by_label("Current password").fill("Test-Password-123")
     form.get_by_label("New password", exact=True).fill("Another-Password-456")
     form.get_by_label("Confirm new password").fill("Another-Password-456")
     form.get_by_role("button", name="Change password").click()
     expect(page.get_by_text("Your password was changed.")).to_be_visible()
+
+
+def test_profile_change_email(sign_in):
+    page = sign_in("seller_a")
+    page.goto("/profile")
+    expect(page.get_by_label("Account type: Seller")).to_be_visible()
+    page.get_by_text("Change email", exact=True).first.click()
+    form = page.get_by_role("form", name="Change email")
+    form.get_by_label("New email").fill("seller.a.new@test.local")
+    form.get_by_label("Current password").fill("Test-Password-123")
+    form.get_by_role("button", name="Change email").click()
+    expect(page.get_by_text("Your email was changed.")).to_be_visible()
+    expect(page.get_by_text("seller.a.new@test.local").first).to_be_visible()
+
+
+def test_buyer_picks_listings_for_multi_seller_negotiation(sign_in):
+    """Option B: choose 2 to 5 listings in the marketplace and negotiate with all of them."""
+    page = sign_in("buyer")
+    page.goto("/products")
+    buttons = page.get_by_role("button", name="+ Multi-seller negotiation")
+    expect(buttons.first).to_be_visible()
+    page.get_by_role("article").filter(has_text="Samsung Galaxy S24").get_by_role("button", name="+ Multi-seller negotiation").click()
+    bar = page.get_by_role("region", name="Multi-seller selection")
+    expect(bar).to_contain_text("1 of 5 selected")
+    expect(bar.get_by_role("button", name=re.compile("Negotiate with these"))).to_be_disabled()   # at least 2
+    page.get_by_role("button", name="+ Multi-seller negotiation").first.click()
+    expect(bar).to_contain_text("2 of 5 selected")
+    bar.get_by_role("link", name=re.compile("Negotiate with these 2 sellers")).click()
+    page.wait_for_url(re.compile(r"/products/\d+\?select="))
+    expect(page.get_by_text(re.compile("You chose these 2 listings"))).to_be_visible()
+    page.get_by_role("radio", name=re.compile("^Automated")).check()
+    page.get_by_role("button", name="Start Multi-Seller Negotiation").click()
+    expect(page.get_by_text(re.compile(r"\d eligible Agreements"))).to_be_visible(timeout=30000)
