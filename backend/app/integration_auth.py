@@ -13,6 +13,8 @@ router=APIRouter(prefix="/auth",tags=["authentication"])
 COOKIE="autoneg_session"
 sessions=Table("web_auth_sessions",Base.metadata,Column("token_hash",String(64),primary_key=True),Column("user_id",BigInteger,ForeignKey("users.id",ondelete="CASCADE"),nullable=False),Column("expires_at",DateTime(timezone=True),nullable=False))
 _failures=defaultdict(list)
+# Old public demo passwords; accounts that still use them must be given a private password.
+BLOCKED_PASSWORDS=("Demo@1234","change-me","password","admin")
 def public_user(u):return {"id":u.id,"name":f"{u.first_name} {u.last_name}".strip(),"email":u.email,"role":u.role,"active":u.is_active}
 def check_origin(request):
     if request.method in ("GET","HEAD","OPTIONS"):return
@@ -43,7 +45,7 @@ async def set_cookie(user_id,response,db):
 @router.post("/login")
 async def login(payload:Login,request:Request,response:Response,db=Depends(get_session)):
     check_origin(request)
-    if payload.password in ("Demo@1234","change-me","password","admin"):
+    if payload.password in BLOCKED_PASSWORDS:
         raise HTTPException(403,"This existing account requires activation with a private password by the site owner.")
     key=request.client.host if request.client else "unknown";cut=time.monotonic()-900
     _failures[key]=[v for v in _failures[key] if v>cut]
@@ -71,6 +73,23 @@ async def register(payload:Register,request:Request,response:Response,db=Depends
     db.add(u);await db.flush();await set_cookie(u.id,response,db);return public_user(u)
 @router.get("/me")
 async def me(user=Depends(current_user)):return user
+class PasswordChange(BaseModel):
+    currentPassword:str=Field(min_length=1,max_length=256)
+    newPassword:str=Field(min_length=12,max_length=256)
+@router.post("/password")
+async def change_password(payload:PasswordChange,request:Request,user=Depends(current_user),db=Depends(get_session)):
+    """Change the signed-in user's password and end their other sessions."""
+    check_origin(request)
+    u=await db.get(User,user["id"])
+    try:valid=verify_password(payload.currentPassword,u.password_hash)
+    except Exception:valid=False
+    if not valid:raise HTTPException(400,"The current password is incorrect.")
+    if payload.newPassword==payload.currentPassword:raise HTTPException(400,"Choose a new password that is different from the current one.")
+    if payload.newPassword in BLOCKED_PASSWORDS:raise HTTPException(400,"This password is not allowed.")
+    u.password_hash=hash_password(payload.newPassword)
+    token=request.cookies.get(COOKIE,"");current=hashlib.sha256(token.encode()).hexdigest()
+    await db.execute(delete(sessions).where(sessions.c.user_id==u.id,sessions.c.token_hash!=current))
+    await db.commit();return {"ok":True}
 @router.post("/logout")
 async def logout(request:Request,response:Response,db=Depends(get_session)):
     check_origin(request);token=request.cookies.get(COOKIE,"")

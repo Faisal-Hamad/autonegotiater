@@ -33,3 +33,12 @@ backups/
 .cache/
 .turbo/
 .pnpm-store/
+
+# Test outputs
+.coverage
+coverage.xml
+coverage-html/
+test-results.xml
+e2e-results.xml
+e2e/.out/
+e2e/test-output/

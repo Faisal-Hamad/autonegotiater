@@ -8,7 +8,9 @@ export const competitiveProduct = {
     description: "Exact demo specification: XPS 15 9530, Intel Core i7, 16 GB RAM, 512 GB SSD, new. Compare independent mock sellers for this same specification.",
     base_price: "4700.00", stock_quantity: 25, image_url: null, created_at: "2026-10-18T08:00:00Z",
 };
-export type Requirements = { quantity: number; targetPrice: number; maximumPrice: number; deliveryDays: number; maxRounds: number };
+export type NegotiationMode = "semi_automated" | "automated";
+export type Requirements = { quantity: number; targetPrice: number; maximumPrice: number; deliveryDays: number; maxRounds: number; mode?: NegotiationMode };
+export const modeLabels: Record<NegotiationMode, string> = { semi_automated: "Semi-automated", automated: "Automated" };
 export const defaultRequirements: Requirements = { quantity: 10, targetPrice: 4000, maximumPrice: 4300, deliveryDays: 7, maxRounds: 6 };
 export type Inventory = { declaredMinimumPrice?: number; maximumDiscount?: number; description?: string; imageUrl?: string; storefrontKey: string; ownerSellerId: number; id: string; name: string; productKey: string; startingPrice: number; minimumPrice: number; stock: number; deliveryDays: number; concession: number; enabled?: boolean; maxRounds?: number; strategy?: "steady" | "competitive" };
 const inventory: Inventory[] = [
@@ -19,13 +21,13 @@ const inventory: Inventory[] = [
     { storefrontKey: "dell-limited", ownerSellerId: 2, id: "limited", name: "Najd Laptop Outlet", productKey: exactProductKey, startingPrice: 4250, minimumPrice: 3900, stock: 6, deliveryDays: 3, concession: 150 },
     { storefrontKey: "dell-different", ownerSellerId: 3, id: "different", name: "XPS 13 Listing (Different Product)", productKey: "DELL-XPS13-I7-16GB-512GB-NEW", startingPrice: 3900, minimumPrice: 3600, stock: 30, deliveryDays: 3, concession: 150 },
 ];
-export type Message = { timestamp?: string; round: number; agent: "Buyer Agent" | "Seller Agent" | "Market update"; action: "offer" | "counteroffer" | "accept" | "decline" | "announcement"; price?: number; explanation: string };
-export type SellerStatus = "ready" | "negotiating" | "agreed" | "rejected" | "excluded";
-export const sellerStatusLabels: Record<SellerStatus, string> = { ready: "Ready", negotiating: "Negotiating", agreed: "Agreed", rejected: "Rejected", excluded: "Excluded" };
+export type Message = { timestamp?: string; round: number; agent: "Buyer Agent" | "Seller Agent" | "Market update" | "System" | "Seller"; action: "offer" | "counteroffer" | "accept" | "decline" | "announcement" | "seller_review" | "reject"; price?: number; explanation: string };
+export type SellerStatus = "ready" | "negotiating" | "agreed" | "rejected" | "excluded" | "awaiting_seller" | "declined";
+export const sellerStatusLabels: Record<SellerStatus, string> = { ready: "Ready", negotiating: "Negotiating", agreed: "Agreed", rejected: "Rejected", excluded: "Excluded", awaiting_seller: "Waiting for Seller decision", declined: "No agreement" };
 type SellerState = { sellerAccountId: number; inventory: Inventory; status: SellerStatus; reason: string; currentPrice?: number; agreedPrice?: number; history: Message[] };
 type PendingRound = { target: CompetitiveSession; events: { sellerId: string; message: Message }[]; index: number };
 export type CompetitiveSession = { productId: number; productName: string; catalogId: string; pending?: PendingRound; buyerId: number; requirements: Requirements; round: number; phase: "running" | "review" | "approved" | "rejected" | "cancelled"; stopReason?: string; sellers: SellerState[]; announcements: { round: number; price: number; eligibleCount: number }[]; approvedSellerId?: string };
-export type SellerView = { productId?:number;productName?:string;description?:string;matchKey?:string; catalogId: string; id: string; name: string; exactProduct: boolean; startingPrice: number; stock: number; deliveryDays: number; participates: boolean; status: SellerStatus; reason: string; currentPrice?: number; agreedPrice?: number; history: Message[] };
+export type SellerView = { productId?:number;productName?:string;description?:string;matchKey?:string; catalogId: string; id: string; name: string; exactProduct: boolean; startingPrice: number; stock: number; deliveryDays: number; participates: boolean; status: SellerStatus; reason: string; currentPrice?: number; agreedPrice?: number; pendingOffer?: number; history: Message[] };
 export type CompetitiveView = Omit<CompetitiveSession, "sellers" | "pending"> & { completedRounds: number; sellers: SellerView[] };
 const cents = (value: number) => Math.round(value * 100);
 const currency = (value: number) => `${value.toFixed(2)} SAR`;
@@ -45,7 +47,7 @@ const catalogIds: Record<number, string> = {
 };
 export function catalogIdentity(productId: number) { return realMode ? String(productId) : catalogIds[productId] ?? `LOCAL-LISTING-${productId}`; }
 export function requirementsFor(product: Product): Requirements {
-    if(realMode){const price=Number(product.base_price);return {quantity:1,targetPrice:Math.max(.01,Math.floor(price*80)/100),maximumPrice:Math.max(.01,Math.floor(price*95)/100),deliveryDays:7,maxRounds:6};}
+    if(realMode){const price=Number(product.base_price);return {quantity:1,targetPrice:Math.max(.01,Math.floor(price*80)/100),maximumPrice:Math.max(.01,Math.floor(price*95)/100),deliveryDays:7,maxRounds:6,mode:"semi_automated"};}
     if (product.id === competitiveProductId) return { ...defaultRequirements };
     const price = Number(product.base_price);
     return { quantity: 1, targetPrice: Math.max(.01, Math.round(price * .85 * 100) / 100), maximumPrice: Math.max(.01, Math.round(price * .92 * 100) / 100), deliveryDays: 7, maxRounds: 6 };
@@ -200,6 +202,7 @@ export type SellerCompetitiveSession = {
     round: number; maxRounds: number; phase: CompetitiveSession["phase"]; status: SellerStatus;
     startingPrice: number; minimumPrice: number; currentPrice?: number; agreedPrice?: number; stock: number; deliveryDays: number;
     announcements: Message[]; approval: "pending" | "selected" | "not_selected"; history: Message[];
+    attemptId?: string; pendingOffer?: number;
 };
 export function sellerCompetitiveViews(session: CompetitiveSession, sellerAccountId: number): SellerCompetitiveSession[] {
     return session.sellers.filter(s => s.sellerAccountId === sellerAccountId && s.inventory.ownerSellerId === sellerAccountId).map(s => ({

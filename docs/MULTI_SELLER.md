@@ -20,6 +20,23 @@ Following the supervisor's feedback, the main negotiation flow is **one buyer ne
    - **automated:** the agent closes the agreed offer with the highest score.
    - If no seller agreed, the request fails.
 
+## Semi-automated and automated modes
+
+The buyer chooses the mode before starting (step 1 on the product page):
+
+- **Semi-automated (default):** the Buyer Agent starts at the target price and raises its offer every round until it reaches the buyer's maximum price in the last round. If a Seller Agent still asks for more when the buyer has reached that maximum (the buyer's **last point**), that seller's negotiation stops with the status `awaiting_seller`, and the seller gets a notification: *"the buyer reached their final offer of SAR X. Accept or reject it."* The seller opens the session and presses **Accept** or **Reject**. Accepting records an agent agreement at the buyer's maximum, even below the seller's configured minimum, because the human seller decided. The buyer's review starts only after every waiting seller has answered.
+- **Automated:** the agents finish alone. A seller whose minimum is above the buyer's maximum ends with no agreement.
+
+In both modes the buyer still approves the final agreement.
+
+API: `POST /api/integration/attempts/{id}/seller-decision` with `{"listingId": "...", "decision": "accept" | "reject"}`; only the seller who owns that listing may call it, and only once.
+
+## Buying without negotiation
+
+Each product page has **Buy now at SAR X · no negotiation**. The buyer chooses a quantity and confirms; the deal is recorded at the listed price, the stock is reduced and the seller sees the sale. No agents or rounds are used. The agreement is labelled **Direct purchase** in the agreements list and in admin reports.
+
+API: `POST /api/integration/buy-now` with `{"productId": 1, "quantity": 1}` (buyers only).
+
 ## Comparing different products (Utility Score)
 
 Each offer gets a **utility score** from 0 (worst) to 1 (best):

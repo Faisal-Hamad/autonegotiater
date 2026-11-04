@@ -283,7 +283,7 @@ export function DemoScreen({ role, segments = [] }: {
         </>;
     if (role === "admin" && (section === "users" || section === "sellers"))
         return <>
-        <Heading title={section === "sellers" ? "Seller management" : "User management"} description="Synthetic account status changes only. Real verification and suspension require an authorized backend."/>
+        <Heading title={section === "sellers" ? "Seller management" : "User management"} description="Suspending an account blocks sign-in and ends its active sessions immediately. Reactivate it at any time."/>
         <label className="mb-5">Search accounts<input value={filter} onChange={e => setFilter(e.target.value)}/>
         </label>
         <div className="panel table-wrap">

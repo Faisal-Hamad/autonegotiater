@@ -121,6 +121,11 @@ A shared log of the problems we ran into and how we fixed them. Add new entries 
 
 ## Backend
 
+### 38. Buyer Agent never raised its offer in multi-seller negotiations
+- **Problem:** In every round the Buyer Agent offered only the target price (for example 3,080 SAR six times), then accepted the seller's last counteroffer. The buyer never reached its maximum price, so the semi-automated rule "notify the seller when the buyer reaches the last point" could never happen.
+- **Cause:** After the shared engine was introduced (commit `223991c`), `competitive_engine.py` created the Buyer Agent with `target_price=target` and no opening price. `buyer_decision` moves the offer from the opening price to the target, so the offer stayed at the target.
+- **Fix:** Create the Buyer Agent with `opening_price=target` and `target_price=maximum`, so the offer rises from the target to the maximum by the last round. Test `test_buyer_offer_rises_to_maximum` checks it.
+
 ### 12. `pip` refuses to install `requirements.txt`
 - **Problem:** `pip install -r requirements.txt` failed with `requirements are unsatisfiable`.
 - **Cause:** `celery[redis]==5.5.3` needs `redis<=5.2.1`, but we had pinned `redis==6.2.0`.

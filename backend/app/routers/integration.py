@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from app.db import Base,get_session
 from app.models import User,Product,SellerRule,NegotiationSession,Offer,Deal,AuditLog
 from app.integration_auth import current_user,public_user
-from app.competitive_engine import create,step,buyer_view,cents,now
+from app.competitive_engine import create,step,buyer_view,cents,now,seller_decide
 from app.product_identity import catalog_match_key
 from app.routers.workspace import build_workspace_state
 router=APIRouter(prefix="/integration",tags=["authenticated integration"])
@@ -30,17 +30,21 @@ async def catalog(db,private_owner=None):
 @router.get("/catalog")
 async def public_catalog(db=Depends(get_session)):return await catalog(db)
 async def payload(db,user):
-    uid=user["id"];role=user["role"];base=await build_workspace_state(db,viewer_id=uid);items=await catalog(db,uid if role=="seller" else None);attempts=sorted(await load(db,"attempt"),key=lambda row:row["data"]["createdAt"]);views=[];seller_views=[];ops=[];agreements=[];hidden_sessions=set()
+    uid=user["id"];role=user["role"];base=await build_workspace_state(db,viewer_id=uid);items=await catalog(db,uid if role=="seller" else None);attempts=sorted(await load(db,"attempt"),key=lambda row:row["data"]["createdAt"]);views=[];seller_views=[];ops=[];agreements=[];hidden_sessions=set();seller_notices=[]
     for rec in attempts:
         e=rec["data"];owned=uid==e["buyerId"] if role=="buyer" else any(s["sellerId"]==uid for s in e["sellers"]) if role=="seller" else role=="admin"
         if not owned:continue
         product=e["product"];rid=rec["id"];status="completed" if e["phase"]=="approved" else "awaiting_approval" if e["phase"]=="review" and any(s["status"]=="agreed" for s in e["sellers"]) else "failed" if e["phase"]=="review" else e["phase"] if e["phase"] in ("cancelled","rejected") else "paused" if e.get("paused") else "active"
         if role=="buyer":views.append({**buyer_view(e),"attemptId":rid})
         owned_sellers=[s for s in e["sellers"] if role!="seller" or s["sellerId"]==uid]
+        if e["phase"]=="running" and any(s["status"]=="awaiting_seller" for s in owned_sellers):status="awaiting_seller"
+        for s in owned_sellers:
+            if role=="seller" and s["status"]=="awaiting_seller":
+                seller_notices.append({"id":"decision-"+rid+"-"+s["id"],"userId":uid,"text":f"{s.get('productName',product['name'])}: the buyer reached their final offer of SAR {s['pendingOffer']:,.2f}. Accept or reject it.","href":f"/dashboard/seller/competitive-session/{rid}","read":False,"createdAt":e["updatedAt"]})
         for s in owned_sellers:
             if role!="seller":continue
             req={k:v for k,v in e["requirements"].items() if k!="maximumPrice"}
-            seller_views.append({"id":rid+"--"+s["id"],"attemptId":rid,"productId":s.get("productId",product["id"]),"productName":s.get("productName",product["name"]),"catalogId":s.get("catalogId",e["catalogId"]),"buyerId":e["buyerId"],"sellerAccountId":uid,"storefrontId":s["id"],"storefrontKey":s["id"],"storefrontName":s["name"],"announcements":[m for m in s["history"] if m["agent"]=="Market update"],"approval":"pending" if e["phase"]!="approved" else "selected" if e.get("approvedSellerId")==s["id"] else "not_selected","requirements":req,"startingPrice":s["startingPrice"],"minimumPrice":s["minimumPrice"],"stock":s["stock"],"deliveryDays":s["deliveryDays"],"concession":s.get("concession",0),"round":e["round"],"maxRounds":e["requirements"]["maxRounds"],"phase":e["phase"],"status":s["status"],"reason":s["reason"],"currentPrice":s.get("currentPrice"),"agreedPrice":s.get("agreedPrice"),"history":s["history"],"anonymousBest":next((m["price"] for m in reversed(s["history"]) if m["agent"]=="Market update"),None)})
+            seller_views.append({"id":rid+"--"+s["id"],"attemptId":rid,"productId":s.get("productId",product["id"]),"productName":s.get("productName",product["name"]),"catalogId":s.get("catalogId",e["catalogId"]),"buyerId":e["buyerId"],"sellerAccountId":uid,"storefrontId":s["id"],"storefrontKey":s["id"],"storefrontName":s["name"],"announcements":[m for m in s["history"] if m["agent"]=="Market update"],"approval":"pending" if e["phase"]!="approved" else "selected" if e.get("approvedSellerId")==s["id"] else "not_selected","requirements":req,"startingPrice":s["startingPrice"],"minimumPrice":s["minimumPrice"],"stock":s["stock"],"deliveryDays":s["deliveryDays"],"concession":s.get("concession",0),"round":e["round"],"maxRounds":e["requirements"]["maxRounds"],"phase":e["phase"],"status":s["status"],"reason":s["reason"],"currentPrice":s.get("currentPrice"),"agreedPrice":s.get("agreedPrice"),"pendingOffer":s.get("pendingOffer"),"history":s["history"],"anonymousBest":next((m["price"] for m in reversed(s["history"]) if m["agent"]=="Market update"),None)})
         if role=="seller" and e["phase"]=="approved" and not any(s["sellerId"]==uid and s["id"]==e.get("approvedSellerId") for s in e["sellers"]):status="not_selected"
         if role=="seller" and all(s["status"]=="excluded" for s in owned_sellers):status="excluded"
         participants=[{k:s[k] for k in ("id","sellerId","name","productId","productName","description","catalogId","startingPrice","currentPrice","agreedPrice","stock","deliveryDays","status","history") if k in s and s[k] is not None} for s in owned_sellers]
@@ -57,7 +61,9 @@ async def payload(db,user):
     base["sessions"]=[s for s in base["sessions"] if s["id"] not in hidden_sessions];base["deals"]=[d for d in base["deals"] if d["sessionId"] not in hidden_sessions]
     read_rec=(await db.execute(select(records.c.data).where(records.c.id=="read:"+str(uid)))).scalar_one_or_none();read_ids=(read_rec or {}).get("ids",[])
     for notice in base["notices"]:notice["read"]=notice["id"] in read_ids
-    notifications=[{"id":"notice-"+r["id"]+"-"+r["status"],"userId":uid,"text":r["productName"]+": "+r["status"].replace("_"," "),"href":r["href"],"read":("notice-"+r["id"]+"-"+r["status"]) in read_ids,"createdAt":r["updatedAt"]} for r in ops]
+    notifications=[{"id":"notice-"+r["id"]+"-"+r["status"],"userId":uid,"text":r["productName"]+": "+r["status"].replace("_"," "),"href":r["href"],"read":("notice-"+r["id"]+"-"+r["status"]) in read_ids,"createdAt":r["updatedAt"]} for r in ops if r["status"]!="awaiting_seller" or role!="seller"]
+    for notice in seller_notices:notice["read"]=notice["id"] in read_ids
+    notifications=seller_notices+notifications
     return {"user":user,"state":base,"catalog":items,"competitive":{"attempts":views,"sellerSessions":seller_views,"records":ops,"agreements":agreements,"notices":notifications}}
 @router.get("/workspace")
 async def workspace(user=Depends(current_user),db=Depends(get_session)):return await payload(db,user)
@@ -106,17 +112,49 @@ async def action(rid:str,body:Action,user=Depends(current_user),db=Depends(get_s
         if not s:raise HTTPException(400,"Select an eligible mutually accepted offer.")
         p=await db.scalar(select(Product).where(Product.id==s["productId"]).with_for_update());rule=await db.scalar(select(SellerRule).where(SellerRule.product_id==p.id)) if p else None
         seller=await db.get(User,s["sellerId"]);latest=next((x["listing"] for x in await catalog(db,s["sellerId"]) if x["product"]["id"]==s["productId"]),None);price=s["agreedPrice"];r=e["requirements"]
-        if not p or not seller or not seller.is_active or p.stock_quantity<r["quantity"] or not latest or not latest["enabled"] or (latest["matchKey"]!=e["matchKey"] if e.get("matchKey") else latest["catalogId"]!=e["catalogId"]) or (s.get("productName") is not None and (p.name!=s["productName"] or p.description!=s.get("description"))) or not latest["deliveryDays"] or latest["deliveryDays"]>r["deliveryDays"] or not max(s["minimumPrice"],latest["minimumPrice"])<=price<=r["maximumPrice"] or not s["history"] or s["history"][-1]["action"]!="accept" or s["history"][-1]["price"]!=price:raise HTTPException(409,"Listing availability or terms changed. Start another negotiation.")
-        canonical=NegotiationSession(buyer_id=user["id"],product_id=p.id,status="completed",mode="semi_automated",max_budget=Decimal(str(r["maximumPrice"])),round_count=e["round"])
+        if not p or not seller or not seller.is_active or p.stock_quantity<r["quantity"] or not latest or not latest["enabled"] or (latest["matchKey"]!=e["matchKey"] if e.get("matchKey") else latest["catalogId"]!=e["catalogId"]) or (s.get("productName") is not None and (p.name!=s["productName"] or p.description!=s.get("description"))) or not latest["deliveryDays"] or latest["deliveryDays"]>r["deliveryDays"] or not (s.get("sellerDecision")=="accept" or max(s["minimumPrice"],latest["minimumPrice"])<=price) or price>r["maximumPrice"] or not s["history"] or s["history"][-1]["action"]!="accept" or s["history"][-1]["price"]!=price:raise HTTPException(409,"Listing availability or terms changed. Start another negotiation.")
+        canonical=NegotiationSession(buyer_id=user["id"],product_id=p.id,status="completed",mode=r.get("mode","semi_automated"),max_budget=Decimal(str(r["maximumPrice"])),round_count=e["round"])
         db.add(canonical);await db.flush();p.stock_quantity-=r["quantity"]
         for m in s["history"]:
-            if m["agent"] not in ("Buyer Agent","Seller Agent"):continue
+            if m["agent"] not in ("Buyer Agent","Seller Agent","Seller"):continue
             db.add(Offer(session_id=canonical.id,offered_by="buyer" if m["agent"]=="Buyer Agent" else "seller",price=Decimal(str(m["price"])),conditions={"action":m["action"],"message":m["explanation"],"quantity":r["quantity"]},status="accepted" if m["action"]=="accept" else "countered",round_number=m["round"]))
         deal=Deal(session_id=canonical.id,final_price=Decimal(str(price)),final_conditions={"quantity":r["quantity"],"delivery_days":s["deliveryDays"],"total":round(price*r["quantity"],2),"integration_attempt":rid,"product_name":p.name,"product_description":p.description},closed_by="buyer",payment_status="pending");db.add(deal);await db.flush()
         e["phase"]="approved";e["approvedSellerId"]=s["id"];e["decisionAt"]=now()
         e["agreement"]={"id":"AGR-"+str(deal.id),"dbSessionId":canonical.id,"sessionId":rid,"buyerId":user["id"],"sellerId":s["sellerId"],"listingId":s["id"],"catalogProductId":latest["catalogId"],"storefrontId":s["id"],"storefrontName":s["name"],"productId":p.id,"productName":p.name,"productDescription":p.description,"requestedProductId":e["productId"],"requestedProductName":e["productName"],"quantity":r["quantity"],"unitPrice":price,"total":round(price*r["quantity"],2),"deliveryDays":s["deliveryDays"],"status":"RECORDED","createdAt":now(),"approvedAt":now()}
     else:raise HTTPException(400,"Unsupported action.")
     e["updatedAt"]=now();await db.execute(update(records).where(records.c.id==rid).values(data=e));db.add(AuditLog(user_id=user["id"],action="competitive_"+body.action,details={"attempt_id":rid}));await db.commit();return await payload(db,user)
+class SellerDecision(BaseModel):
+    listingId:str
+    decision:Literal["accept","reject"]
+@router.post("/attempts/{rid}/seller-decision")
+async def seller_decision(rid:str,body:SellerDecision,user=Depends(current_user),db=Depends(get_session)):
+    """Semi-automated mode: the seller answers the buyer's final offer."""
+    if user["role"]!="seller":raise HTTPException(403,"Only the Seller can answer this offer.")
+    rec=(await db.execute(select(records).where(records.c.id==rid,records.c.kind=="attempt").with_for_update())).mappings().first()
+    if not rec:raise HTTPException(404,"Session unavailable.")
+    try:e=seller_decide(rec["data"],body.listingId,user["id"],body.decision)
+    except PermissionError as exc:raise HTTPException(403,str(exc))
+    except LookupError as exc:raise HTTPException(409,str(exc))
+    await db.execute(update(records).where(records.c.id==rid).values(data=e));db.add(AuditLog(user_id=user["id"],action="seller_"+body.decision+"_final_offer",details={"attempt_id":rid,"listing_id":body.listingId}));await db.commit();return await payload(db,user)
+class BuyNow(BaseModel):
+    productId:int
+    quantity:int=Field(1,ge=1,le=10000)
+@router.post("/buy-now")
+async def buy_now(body:BuyNow,user=Depends(current_user),db=Depends(get_session)):
+    """Direct purchase at the listed price, without negotiation."""
+    if user["role"]!="buyer":raise HTTPException(403,"Only a Buyer can purchase.")
+    p=await db.scalar(select(Product).where(Product.id==body.productId).with_for_update())
+    if not p:raise HTTPException(404,"Product unavailable.")
+    seller=await db.get(User,p.seller_id)
+    if not seller or not seller.is_active:raise HTTPException(409,"This seller is not available.")
+    if p.stock_quantity<body.quantity:raise HTTPException(409,"Not enough stock for this quantity.")
+    price=p.base_price;total=price*body.quantity
+    session=NegotiationSession(buyer_id=user["id"],product_id=p.id,status="completed",mode="automated",max_budget=price,round_count=0)
+    db.add(session);await db.flush();p.stock_quantity-=body.quantity
+    deal=Deal(session_id=session.id,final_price=price,final_conditions={"purchase_type":"direct","quantity":body.quantity,"total":float(total),"product_name":p.name},closed_by="buyer",payment_status="pending")
+    db.add(deal);await db.flush()
+    db.add(AuditLog(user_id=user["id"],action="direct_purchase",details={"product_id":p.id,"deal_id":deal.id,"quantity":body.quantity}))
+    await db.commit();return await payload(db,user)
 class Listing(BaseModel):
     catalogProductId:int
     productId:int|None=None

@@ -19,5 +19,18 @@ export function RealAccount({kind}:{kind:"login"|"register"|"profile"}){
  {kind!=="profile"&&<label>Password<input name="password" type="password" required minLength={kind==="register"?12:1} maxLength={256} autoComplete={kind==="register"?"new-password":"current-password"}/></label>}
  {kind==="register"&&<label>Account role<select name="role"><option value="buyer">Buyer</option><option value="seller">Seller</option></select></label>}
  {error&&<p className="text-rose-700" role="alert">{error}</p>}<button className="btn w-full" disabled={busy}>{busy?"Please wait…":kind==="login"?"Sign in":kind==="register"?"Create account":"Save profile"}</button>
- {kind==="profile"?<button type="button" className="btn-secondary w-full" onClick={async()=>{try{await realApi("/auth/logout",{});await reload();router.push("/login");}catch(e){setError(e instanceof Error?e.message:"Unable to sign out.");}}}>Sign out</button>:<Link className="text-indigo-600 block" href={kind==="login"?"/register":"/login"}>{kind==="login"?"Create a Buyer or Seller account":"Already have an account? Sign in"}</Link>}</form></div>;
+ {kind==="profile"?<button type="button" className="btn-secondary w-full" onClick={async()=>{try{await realApi("/auth/logout",{});await reload();router.push("/login");}catch(e){setError(e instanceof Error?e.message:"Unable to sign out.");}}}>Sign out</button>:<Link className="text-indigo-600 block" href={kind==="login"?"/register":"/login"}>{kind==="login"?"Create a Buyer or Seller account":"Already have an account? Sign in"}</Link>}</form>{kind==="profile"&&<ChangePassword/>}</div>;
+}
+function ChangePassword(){
+ const[error,setError]=useState(""),[done,setDone]=useState(false),[busy,setBusy]=useState(false);
+ async function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();if(busy)return;const form=event.currentTarget,f=new FormData(form);setError("");setDone(false);
+  if(f.get("newPassword")!==f.get("confirmPassword")){setError("The new passwords do not match.");return;}
+  setBusy(true);try{await realApi("/auth/password",{currentPassword:String(f.get("currentPassword")),newPassword:String(f.get("newPassword"))});form.reset();setDone(true);}
+  catch(e){setError(e instanceof Error?e.message:"Unable to change the password.");}finally{setBusy(false);}}
+ return <form className="panel space-y-5 mt-6" onSubmit={submit} aria-label="Change password"><h2 className="text-xl font-bold">Change password</h2><p className="muted text-sm">Use at least 12 characters. Your other signed-in devices are signed out.</p>
+  <label>Current password<input name="currentPassword" type="password" required maxLength={256} autoComplete="current-password"/></label>
+  <label>New password<input name="newPassword" type="password" required minLength={12} maxLength={256} autoComplete="new-password"/></label>
+  <label>Confirm new password<input name="confirmPassword" type="password" required minLength={12} maxLength={256} autoComplete="new-password"/></label>
+  {error&&<p className="text-rose-700" role="alert">{error}</p>}{done&&<p className="text-emerald-700" role="status">Your password was changed.</p>}
+  <button className="btn w-full" disabled={busy}>{busy?"Please wait…":"Change password"}</button></form>;
 }

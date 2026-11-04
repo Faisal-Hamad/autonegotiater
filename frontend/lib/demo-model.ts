@@ -58,6 +58,8 @@ export type Deal = {
     createdAt: string;
     rating?: number;
     feedback?: string;
+    purchaseType?: "direct" | "negotiated";
+    quantity?: number;
 };
 export type Notice = {
     id: number;

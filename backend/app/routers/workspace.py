@@ -559,6 +559,8 @@ async def build_workspace_state(session: AsyncSession, viewer_id: int | None = N
             "listingPrice": float(cond.get("listing_price", p_obj.base_price if p_obj else d.final_price)),
             "warranty": int(cond.get("warranty", 0)),
             "delivery": str(cond.get("delivery", "Buyer pickup")),
+            "purchaseType": "direct" if cond.get("purchase_type") == "direct" else "negotiated",
+            "quantity": int(cond.get("quantity", 1)),
             "createdAt": d.closed_at.isoformat() if d.closed_at else datetime.now(timezone.utc).isoformat(),
         }
         if rating_obj:

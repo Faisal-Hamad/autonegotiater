@@ -1,6 +1,6 @@
 name: Deploy
 
-# Runs on GitHub's runner and deploys to the server over SSH.
+# Runs the tests on GitHub's runner, then deploys to the server over SSH.
 # Only the services whose folders changed are rebuilt.
 on:
   push:
@@ -12,7 +12,114 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 1) Unit and API tests against a real PostgreSQL database, with a coverage report.
+  backend-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: autoneg
+          POSTGRES_PASSWORD: autoneg
+          POSTGRES_DB: autoneg_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U autoneg" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://autoneg:autoneg@localhost:5432/autoneg_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov httpx
+      - name: Run tests with coverage
+        run: python -m pytest tests -q --junitxml=test-results.xml --cov=app --cov-report=term --cov-report=html:coverage-html
+      - name: Save test and coverage reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-reports
+          path: |
+            backend/test-results.xml
+            backend/coverage-html
+
+  # 2) Frontend type check, then the whole system in a real browser (Playwright).
+  e2e-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: autoneg
+          POSTGRES_PASSWORD: autoneg
+          POSTGRES_DB: autoneg_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U autoneg" --health-interval 5s --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://autoneg:autoneg@localhost:5432/autoneg_e2e
+      AUTH_COOKIE_SECURE: "false"
+      AUTH_ALLOWED_ORIGINS: http://127.0.0.1:3000
+      BASE_URL: http://127.0.0.1:3000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Type check and build the frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm run build
+          cp -r .next/static .next/standalone/.next/
+          cp -r public .next/standalone/
+      - name: Start the backend with test accounts
+        working-directory: backend
+        run: |
+          pip install -r requirements.txt
+          alembic upgrade head
+          python -m tests.seed_data
+          nohup uvicorn app.main:app --host 127.0.0.1 --port 8000 > ../backend.log 2>&1 &
+      - name: Start the frontend
+        working-directory: frontend/.next/standalone
+        run: HOSTNAME=127.0.0.1 PORT=3000 nohup node server.js > ../../../frontend.log 2>&1 &
+      - name: Install Playwright
+        working-directory: e2e
+        run: |
+          pip install -r requirements.txt
+          python -m playwright install --with-deps chromium
+      - name: Run browser tests
+        working-directory: e2e
+        run: |
+          curl -fsS --retry 20 --retry-delay 2 --retry-all-errors http://127.0.0.1:3000/api/health
+          python -m pytest -q --browser chromium --junitxml=e2e-results.xml --screenshot only-on-failure --output test-output
+      - name: Save browser test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-reports
+          path: |
+            e2e/e2e-results.xml
+            e2e/test-output
+            backend.log
+            frontend.log
+
+  # 3) Deploy only when every test passed.
   deploy:
+    needs: [backend-tests, e2e-tests]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
