@@ -69,7 +69,8 @@ def test_admin_platform_report(sign_in):
     page.goto("/dashboard/admin/reports")
     expect(page.get_by_text("Success rate", exact=True)).to_be_visible()
     with page.expect_download() as download:
-        page.get_by_role("button", name="Download CSV").click()
+        # The page header and the report preview both have a Download CSV button; use the preview one.
+        page.get_by_label("Report preview").get_by_role("button", name="Download CSV").click()
     assert download.value.suggested_filename.endswith(".csv")
     page.get_by_role("radio", name=re.compile("Seller report")).click()
     page.get_by_role("button", name=re.compile("Seller A")).click()
@@ -131,6 +132,6 @@ def test_bilingual_arabic_switch_and_one_to_one_nil_mode(sign_in):
     page.get_by_role("radio", name=re.compile(r"Nil \(Manual\)")).check()
     page.get_by_role("button", name="Switch language").click()
     expect(page.locator("html")).to_have_attribute("dir", "rtl")
-    expect(page.get_by_text(re.compile("تفاوض مباشر"))).to_be_visible()
+    expect(page.get_by_text("تفاوض مباشر واحد لواحد مع هذا البائع فقط")).to_be_visible()
     page.get_by_role("button", name="Switch language").click()
     expect(page.locator("html")).to_have_attribute("dir", "ltr")
