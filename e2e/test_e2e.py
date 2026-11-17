@@ -121,3 +121,16 @@ def test_buyer_picks_listings_for_multi_seller_negotiation(sign_in):
     page.get_by_role("radio", name=re.compile("^Automated")).check()
     page.get_by_role("button", name="Start Multi-Seller Negotiation").click()
     expect(page.get_by_text(re.compile(r"\d eligible Agreements"))).to_be_visible(timeout=30000)
+
+
+def test_bilingual_arabic_switch_and_one_to_one_nil_mode(sign_in):
+    """Verify Arabic RTL toggle and 1-to-1 Nil (Manual) negotiation page."""
+    page = sign_in("buyer")
+    page.goto(f"/products/{PRODUCT_A}/negotiate")
+    expect(page.get_by_text(re.compile("One-to-One Mode"))).to_be_visible()
+    page.get_by_role("radio", name=re.compile(r"Nil \(Manual\)")).check()
+    page.get_by_role("button", name="Switch language").click()
+    expect(page.locator("html")).to_have_attribute("dir", "rtl")
+    expect(page.get_by_text(re.compile("تفاوض مباشر"))).to_be_visible()
+    page.get_by_role("button", name="Switch language").click()
+    expect(page.locator("html")).to_have_attribute("dir", "ltr")

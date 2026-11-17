@@ -170,3 +170,28 @@ def test_listing_without_delivery_setting_gets_default(app_client, data):
     app_client.portal.call(drop_listing_settings)
     catalog = app_client.get("/integration/catalog").json()
     assert all(item["listing"]["deliveryDays"] == DEFAULT_DELIVERY_DAYS for item in catalog)
+
+
+def test_one_to_one_single_listing_and_nil_manual_mode(data, login):
+    """TC-NEG-14: One-to-One single-listing negotiation with Nil (manual) buyer mode."""
+    buyer = login("buyer")
+    pid = data["products"]["seller_a"]
+    r = buyer.post("/integration/attempts", json={
+        "productId": pid,
+        "requirements": {**REQ, "mode": "nil"},
+        "matchingPolicy": "single-listing",
+        "productIds": [pid],
+    })
+    assert r.status_code == 200, r.text
+    attempt = r.json()["competitive"]["attempts"][-1]
+    assert len(attempt["sellers"]) == 1
+    rid = attempt["attemptId"]
+    r2 = buyer.post(f"/integration/attempts/{rid}", json={
+        "action": "manual_offer",
+        "price": 3550,
+        "note": "Manual offer in 1-to-1 mode",
+    })
+    assert r2.status_code == 200, r2.text
+    updated = next(a for a in r2.json()["competitive"]["attempts"] if a["attemptId"] == rid)
+    assert updated["round"] == 1
+    assert any("explanation_ar" in m for m in updated["sellers"][0]["history"])
