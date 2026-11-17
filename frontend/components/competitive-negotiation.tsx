@@ -440,8 +440,8 @@ function CompetitiveExperience({ product, attemptId, setup = false, singleListin
                     <svg viewBox="0 0 210 85" aria-label="Public Seller starting prices" role="img">
                         <defs>
                             <linearGradient id={`an-chart-${product.id}`} x1="0" y1="0" x2="0" y2="1">
-                                <stop stopColor="#6252ff" stopOpacity=".22" />
-                                <stop offset="1" stopColor="#6252ff" stopOpacity="0" />
+                                <stop stopColor="#17798f" stopOpacity=".22" />
+                                <stop offset="1" stopColor="#17798f" stopOpacity="0" />
                             </linearGradient>
                         </defs>
                         <path
@@ -455,7 +455,7 @@ function CompetitiveExperience({ product, attemptId, setup = false, singleListin
                                 .map((p, i) => `${10 + (i * 190) / Math.max(publicPrices.length - 1, 1)},${65 - ((p - Math.min(...publicPrices)) / Math.max(Math.max(...publicPrices) - Math.min(...publicPrices), 1)) * 45}`)
                                 .join(" ")}
                             fill="none"
-                            stroke="#5940ff"
+                            stroke="#156e82"
                             strokeWidth="2"
                         />
                         {publicPrices.map((p, i) => (
@@ -465,7 +465,7 @@ function CompetitiveExperience({ product, attemptId, setup = false, singleListin
                                 cy={65 - ((p - Math.min(...publicPrices)) / Math.max(Math.max(...publicPrices) - Math.min(...publicPrices), 1)) * 45}
                                 r="3"
                                 fill="white"
-                                stroke="#5940ff"
+                                stroke="#156e82"
                                 strokeWidth="2"
                             />
                         ))}

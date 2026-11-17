@@ -371,13 +371,13 @@ export function AdminReports() {
                                                     <path
                                                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                                         fill="none"
-                                                        stroke="#e2e8f0"
+                                                        stroke="#e3e8eb"
                                                         strokeWidth="3.4"
                                                     />
                                                     <path
                                                         d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
                                                         fill="none"
-                                                        stroke="#4f46e5"
+                                                        stroke="#1b697a"
                                                         strokeWidth="3.4"
                                                         strokeDasharray={`${pct}, 100`}
                                                         strokeLinecap="round"

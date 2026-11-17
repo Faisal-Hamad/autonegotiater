@@ -17,7 +17,7 @@ export async function reportPdf(report: Report): Promise<Blob> {
     const pages: Uint8Array[] = []; let y = 0;
     function start() {
         ctx!.fillStyle = "white"; ctx!.fillRect(0, 0, 1240, 1754);
-        ctx!.fillStyle = "#334155"; ctx!.direction = "ltr"; ctx!.textAlign = "left";
+        ctx!.fillStyle = "#374247"; ctx!.direction = "ltr"; ctx!.textAlign = "left";
         ctx!.font = "24px Arial"; ctx!.fillText("AutoNegotiater | SERVER RECORDS", 70, 65);
         ctx!.font = "18px Arial"; ctx!.fillText(`${report.id} | ${report.generatedAt}`, 70, 103); y = 155;
     }

@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, type ReactNode } from "react";
 import { useCompetitiveWorkspace } from "./competitive-provider";
 import { DesignIcon } from "./approved-visuals";
+import { BrandLogo } from "./brand-logo";
 import { useDemo } from "./demo-provider";
 import { useLanguage } from "@/lib/i18n";
 
@@ -69,11 +70,7 @@ export function SiteShell({ children }: {
             <header className="site-header">
                 <div className="header-inner">
                     <Link className="brand" href="/">
-                        <span className="brand-mark">A</span>
-                        <span>AutoNegotiater</span>
-                        <span className="text-xs font-medium text-slate-400 hidden sm:inline">
-                            {lang === "ar" ? " · منصة التفاوض الذكي" : " · Smart Deal Platform"}
-                        </span>
+                        <BrandLogo tagline={lang === "ar" ? "منصة التفاوض الذكي" : "Smart Deal Platform"} />
                     </Link>
                     <button
                         className="btn-secondary md:hidden"

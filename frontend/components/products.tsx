@@ -207,7 +207,7 @@ export function ProductCatalog({ products: realProducts }: {
             )}
             {selected.length > 0 && <div className="h-24" aria-hidden />}
             {selected.length > 0 && (
-                <section aria-label="Multi-seller selection" className="fixed bottom-0 inset-x-0 z-30 border-t border-indigo-100 bg-white/95 backdrop-blur shadow-[0_-6px_20px_#3240a01a]">
+                <section aria-label="Multi-seller selection" className="fixed bottom-0 inset-x-0 z-30 border-t border-indigo-100 bg-white/95 backdrop-blur shadow-[0_-6px_20px_#23505b1a]">
                     <div className="max-w-6xl mx-auto px-6 py-3 flex flex-wrap items-center gap-3">
                         <div className="min-w-0 flex-1">
                             <strong className="block">
