@@ -52,7 +52,8 @@ jobs:
 
   # 2) Frontend type check, then the whole system in a real browser (Playwright).
   e2e-tests:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest is now Ubuntu 26.04, where Playwright 1.55 cannot install Chromium.
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:17-alpine
