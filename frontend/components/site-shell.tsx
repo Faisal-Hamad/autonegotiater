@@ -6,6 +6,7 @@ import { useState, type ReactNode } from "react";
 import { useCompetitiveWorkspace } from "./competitive-provider";
 import { DesignIcon } from "./approved-visuals";
 import { useDemo } from "./demo-provider";
+import { useLanguage } from "@/lib/i18n";
 
 const sections = {
     buyer: ["Overview", "Negotiations", "Deals", "Notifications"],
@@ -48,28 +49,31 @@ export function SiteShell({ children }: {
 }) {
     const { enabled, state, user, setUserId } = useDemo();
     const competitive = useCompetitiveWorkspace();
+    const { lang, dir, toggleLang, t } = useLanguage();
     const path = usePathname();
     const router = useRouter();
     const [open, setOpen] = useState(false);
     const role = enabled ? user.role : path.startsWith("/dashboard/seller") ? "seller" : path.startsWith("/dashboard/admin") ? "admin" : "buyer";
-    const approvedPage = enabled && /^\/products\/\d+(?:\/competitive)?$/.test(path);
+    const approvedPage = enabled && /^\/products\/\d+(?:\/competitive|\/negotiate)?$/.test(path);
     const workspacePage = path.startsWith("/dashboard") || (enabled && /^\/products\/\d+\/competitive$/.test(path));
     const unreadCount = state.notices.filter(n => n.userId === user.id && !n.read).length + competitive.notices.filter(n => !n.read).length;
 
     const roleStyles: Record<string, { label: string; badge: string }> = {
-        buyer: { label: "Buyer Account", badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-        seller: { label: "Seller Account", badge: "bg-emerald-50 text-emerald-700 border-emerald-200" },
-        admin: { label: "Admin Account", badge: "bg-violet-50 text-violet-700 border-violet-200" },
+        buyer: { label: t("Buyer Account"), badge: "bg-indigo-50 text-indigo-700 border-indigo-200" },
+        seller: { label: t("Seller Account"), badge: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+        admin: { label: t("Admin Account"), badge: "bg-violet-50 text-violet-700 border-violet-200" },
     };
 
     return (
-        <>
+        <div dir={dir} lang={lang}>
             <header className="site-header">
                 <div className="header-inner">
                     <Link className="brand" href="/">
                         <span className="brand-mark">A</span>
                         <span>AutoNegotiater</span>
-                        <span className="text-xs font-medium text-slate-400 hidden sm:inline"> · Smart Deal Platform</span>
+                        <span className="text-xs font-medium text-slate-400 hidden sm:inline">
+                            {lang === "ar" ? " · منصة التفاوض الذكي" : " · Smart Deal Platform"}
+                        </span>
                     </Link>
                     <button
                         className="btn-secondary md:hidden"
@@ -78,19 +82,19 @@ export function SiteShell({ children }: {
                         aria-controls={workspacePage ? "site-navigation workspace-navigation" : "site-navigation"}
                         onClick={() => setOpen(!open)}
                     >
-                        Menu
+                        {lang === "ar" ? "القائمة" : "Menu"}
                     </button>
                     <nav id="site-navigation" className={`${open ? "flex" : "hidden"} main-nav md:flex`}>
                         <Link href="/products" onClick={() => setOpen(false)} className="font-medium text-slate-600 hover:text-indigo-600 transition">
-                            Marketplace
+                            {t("Marketplace")}
                         </Link>
                         {enabled ? (
                             <>
                                 <Link href={`/dashboard/${user.role}`} onClick={() => setOpen(false)} className="font-medium text-slate-600 hover:text-indigo-600 transition">
-                                    Workspace
+                                    {t("Workspace")}
                                 </Link>
                                 <Link href="/notifications" onClick={() => setOpen(false)} className="inline-flex items-center gap-1.5 font-medium text-slate-600 hover:text-indigo-600 transition">
-                                    <span>Alerts</span>
+                                    <span>{t("Alerts")}</span>
                                     <span className="badge">{unreadCount}</span>
                                 </Link>
                                 <Link href="/profile" onClick={() => setOpen(false)} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-100/80 hover:bg-indigo-50 text-slate-800 font-semibold transition">
@@ -101,7 +105,7 @@ export function SiteShell({ children }: {
                                 </Link>
                                 {!realMode && (
                                     <label className="text-xs muted">
-                                        Demo identity
+                                        {lang === "ar" ? "هوية العرض" : "Demo identity"}
                                         <select
                                             aria-label="Demo identity, not real authorization"
                                             value={user.id}
@@ -124,25 +128,35 @@ export function SiteShell({ children }: {
                                 )}
                                 {realMode && (
                                     <Link href={user.active ? "/profile" : "/login"} className="btn-secondary py-1.5 px-3 text-xs">
-                                        {user.active ? "My account" : "Sign in"}
+                                        {user.active ? t("My account") : t("Sign in")}
                                     </Link>
                                 )}
                             </>
                         ) : (
                             <>
-                                <Link href="/login">Sign in</Link>
-                                <Link href="/register" className="btn">Get started</Link>
-                                <Link href="/dashboard/buyer">Buyer</Link>
-                                <Link href="/dashboard/seller">Seller</Link>
-                                <Link href="/dashboard/admin">Admin</Link>
+                                <Link href="/login">{t("Sign in")}</Link>
+                                <Link href="/register" className="btn">{t("Get started")}</Link>
+                                <Link href="/dashboard/buyer">{t("Buyer")}</Link>
+                                <Link href="/dashboard/seller">{t("Seller")}</Link>
+                                <Link href="/dashboard/admin">{t("Admin")}</Link>
                             </>
                         )}
+                        <button
+                            type="button"
+                            onClick={toggleLang}
+                            aria-label="Switch language"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/70 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition"
+                        >
+                            <span>{lang === "en" ? "العربية" : "English"}</span>
+                        </button>
                     </nav>
                 </div>
             </header>
             {enabled && !realMode && (
                 <div className="demo-strip">
-                    DEMO MODE · Synthetic data, scripted negotiation, no Gemini or backend calls. Role switching is not authorization. Saved on the server. Reset is available from Profile.
+                    {lang === "ar"
+                        ? "وضع العرض التجريبي (DEMO MODE) · بيانات تجريبية ومحاكاة تفاوض بدون اتصالات خارجية. تبديل الحساب للعرض فقط."
+                        : "DEMO MODE · Synthetic data, scripted negotiation, no Gemini or backend calls. Role switching is not authorization. Saved on the server. Reset is available from Profile."}
                 </div>
             )}
             <div className={workspacePage ? "workspace" : approvedPage ? "an-content-wrap" : "content-wrap"}>
@@ -153,7 +167,7 @@ export function SiteShell({ children }: {
                         aria-label={`${role} workspace navigation`}
                     >
                         <div className="mb-3 px-3 py-3 rounded-xl bg-slate-50 border border-slate-200/80">
-                            <p className="eyebrow !mb-1">{role} workspace</p>
+                            <p className="eyebrow !mb-1">{t(role[0].toUpperCase() + role.slice(1))} {t("Workspace")}</p>
                             {user.active ? (
                                 <>
                                     <strong className="block text-sm text-slate-900 truncate">{user.name}</strong>
@@ -162,12 +176,13 @@ export function SiteShell({ children }: {
                                     </span>
                                 </>
                             ) : (
-                                <span className="text-xs muted">Select an active account</span>
+                                <span className="text-xs muted">{lang === "ar" ? "اختر حساباً نشطاً" : "Select an active account"}</span>
                             )}
                         </div>
                         {sections[role].map(name => {
                             const href = `/dashboard/${role}${name === "Overview" ? "" : "/" + name.toLowerCase()}`;
                             const active = isActive(path, href, name);
+                            const labelKey = role === "seller" && name === "Products" ? "My Products & Agent Settings" : navigationLabels[name] ?? name;
                             return (
                                 <Link
                                     key={name}
@@ -177,32 +192,28 @@ export function SiteShell({ children }: {
                                     className={active ? "active" : ""}
                                 >
                                     <DesignIcon name={navigationIcons[name] ?? "box"} />
-                                    <span>
-                                        {role === "seller" && name === "Products"
-                                            ? "My Products & Agent Settings"
-                                            : navigationLabels[name] ?? name}
-                                    </span>
+                                    <span>{t(labelKey)}</span>
                                 </Link>
                             );
                         })}
                         {enabled && role === "buyer" && (
                             <Link href="/products" onClick={() => setOpen(false)}>
                                 <DesignIcon name="box" />
-                                <span>Browse Products</span>
+                                <span>{t("Browse Products")}</span>
                             </Link>
                         )}
                         <Link href="/profile" onClick={() => setOpen(false)}>
                             <DesignIcon name="user" />
-                            <span>My Profile</span>
+                            <span>{t("My Profile")}</span>
                         </Link>
                         <div className="mt-auto pt-4 px-3 hidden md:block">
                             <div className="rounded-xl bg-emerald-50/70 border border-emerald-200/60 px-3 py-2.5 text-xs text-emerald-800">
                                 <span className="flex items-center gap-2 font-semibold">
                                     <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                                    System Ready
+                                    {t("System Ready")}
                                 </span>
                                 <span className="block text-[11px] text-emerald-700/80 mt-0.5">
-                                    Rules Engine & Privacy Guard Active
+                                    {t("Rules Engine & Privacy Guard Active")}
                                 </span>
                             </div>
                         </div>
@@ -211,9 +222,11 @@ export function SiteShell({ children }: {
                 <main className="min-w-0">{children}</main>
             </div>
             <footer className="footer">
-                <span>AutoNegotiater · Qassim University graduation project</span>
-                <span>Discover. Delegate. Decide.</span>
+                <span>
+                    {lang === "ar" ? "AutoNegotiater · مشروع تخرج بجامعة القصيم" : "AutoNegotiater · Qassim University graduation project"}
+                </span>
+                <span>{lang === "ar" ? "اكتشف. فوّض. قرّر." : "Discover. Delegate. Decide."}</span>
             </footer>
-        </>
+        </div>
     );
 }

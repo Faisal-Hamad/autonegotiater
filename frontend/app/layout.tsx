@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DemoProvider } from "@/components/demo-provider";
 import { CompetitiveProvider } from "@/components/competitive-provider";
 import { SiteShell } from "@/components/site-shell";
+import { LanguageProvider } from "@/lib/i18n";
 import { isMockDataEnabled } from "@/lib/api";
 import "./globals.css";
 export const metadata: Metadata = {
@@ -15,9 +16,11 @@ export default async function RootLayout({ children }: {
     const products = enabled ? (await import("@/lib/mock-data")).mockProducts : [];
     return <html lang="en" dir="ltr">
     <body>
+    <LanguageProvider>
     <DemoProvider enabled={enabled} products={products}>
     <CompetitiveProvider><SiteShell>{children}</SiteShell></CompetitiveProvider>
     </DemoProvider>
+    </LanguageProvider>
     </body>
     </html>;
 }

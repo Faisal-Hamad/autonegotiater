@@ -8,26 +8,26 @@ export const competitiveProduct = {
     description: "Exact demo specification: XPS 15 9530, Intel Core i7, 16 GB RAM, 512 GB SSD, new. Compare independent mock sellers for this same specification.",
     base_price: "4700.00", stock_quantity: 25, image_url: null, created_at: "2026-10-18T08:00:00Z",
 };
-export type NegotiationMode = "semi_automated" | "automated";
+export type NegotiationMode = "nil" | "semi_automated" | "automated";
 export type Requirements = { quantity: number; targetPrice: number; maximumPrice: number; deliveryDays: number; maxRounds: number; mode?: NegotiationMode };
-export const modeLabels: Record<NegotiationMode, string> = { semi_automated: "Semi-automated", automated: "Automated" };
+export const modeLabels: Record<NegotiationMode, string> = { nil: "Nil (Manual)", semi_automated: "Semi-automated", automated: "Automated" };
 export const defaultRequirements: Requirements = { quantity: 10, targetPrice: 4000, maximumPrice: 4300, deliveryDays: 7, maxRounds: 6 };
-export type Inventory = { declaredMinimumPrice?: number; maximumDiscount?: number; description?: string; imageUrl?: string; storefrontKey: string; ownerSellerId: number; id: string; name: string; productKey: string; startingPrice: number; minimumPrice: number; stock: number; deliveryDays: number; concession: number; enabled?: boolean; maxRounds?: number; strategy?: "steady" | "competitive" };
+export type Inventory = { declaredMinimumPrice?: number; maximumDiscount?: number; description?: string; imageUrl?: string; storefrontKey: string; ownerSellerId: number; id: string; name: string; productKey: string; startingPrice: number; minimumPrice: number; stock: number; deliveryDays: number; concession: number; enabled?: boolean; maxRounds?: number; strategy?: "steady" | "competitive"; sellerMode?: NegotiationMode };
 const inventory: Inventory[] = [
-    { storefrontKey: "dell-riyadh", ownerSellerId: 1, id: "riyadh", name: "Riyadh Tech Supply", productKey: exactProductKey, startingPrice: 4700, minimumPrice: 4050, stock: 25, deliveryDays: 5, concession: 150 },
-    { storefrontKey: "dell-jeddah", ownerSellerId: 2, id: "jeddah", name: "Jeddah Digital Store", productKey: exactProductKey, startingPrice: 4550, minimumPrice: 3980, stock: 18, deliveryDays: 6, concession: 150 },
-    { storefrontKey: "dell-dammam", ownerSellerId: 3, id: "dammam", name: "Dammam Computing", productKey: exactProductKey, startingPrice: 4600, minimumPrice: 4100, stock: 12, deliveryDays: 9, concession: 150 },
-    { storefrontKey: "dell-premium", ownerSellerId: 1, id: "premium", name: "Premium Business Devices", productKey: exactProductKey, startingPrice: 4750, minimumPrice: 4400, stock: 20, deliveryDays: 4, concession: 150 },
-    { storefrontKey: "dell-limited", ownerSellerId: 2, id: "limited", name: "Najd Laptop Outlet", productKey: exactProductKey, startingPrice: 4250, minimumPrice: 3900, stock: 6, deliveryDays: 3, concession: 150 },
-    { storefrontKey: "dell-different", ownerSellerId: 3, id: "different", name: "XPS 13 Listing (Different Product)", productKey: "DELL-XPS13-I7-16GB-512GB-NEW", startingPrice: 3900, minimumPrice: 3600, stock: 30, deliveryDays: 3, concession: 150 },
+    { storefrontKey: "dell-riyadh", ownerSellerId: 1, id: "riyadh", name: "Riyadh Tech Supply", productKey: exactProductKey, startingPrice: 4700, minimumPrice: 4050, stock: 25, deliveryDays: 5, concession: 150, sellerMode: "semi_automated" },
+    { storefrontKey: "dell-jeddah", ownerSellerId: 2, id: "jeddah", name: "Jeddah Digital Store", productKey: exactProductKey, startingPrice: 4550, minimumPrice: 3980, stock: 18, deliveryDays: 6, concession: 150, sellerMode: "semi_automated" },
+    { storefrontKey: "dell-dammam", ownerSellerId: 3, id: "dammam", name: "Dammam Computing", productKey: exactProductKey, startingPrice: 4600, minimumPrice: 4100, stock: 12, deliveryDays: 9, concession: 150, sellerMode: "semi_automated" },
+    { storefrontKey: "dell-premium", ownerSellerId: 1, id: "premium", name: "Premium Business Devices", productKey: exactProductKey, startingPrice: 4750, minimumPrice: 4400, stock: 20, deliveryDays: 4, concession: 150, sellerMode: "semi_automated" },
+    { storefrontKey: "dell-limited", ownerSellerId: 2, id: "limited", name: "Najd Laptop Outlet", productKey: exactProductKey, startingPrice: 4250, minimumPrice: 3900, stock: 6, deliveryDays: 3, concession: 150, sellerMode: "semi_automated" },
+    { storefrontKey: "dell-different", ownerSellerId: 3, id: "different", name: "XPS 13 Listing (Different Product)", productKey: "DELL-XPS13-I7-16GB-512GB-NEW", startingPrice: 3900, minimumPrice: 3600, stock: 30, deliveryDays: 3, concession: 150, sellerMode: "semi_automated" },
 ];
-export type Message = { timestamp?: string; round: number; agent: "Buyer Agent" | "Seller Agent" | "Market update" | "System" | "Seller"; action: "offer" | "counteroffer" | "accept" | "decline" | "announcement" | "seller_review" | "reject"; price?: number; explanation: string };
+export type Message = { timestamp?: string; round: number; agent: "Buyer Agent" | "Seller Agent" | "Market update" | "System" | "Seller"; action: "offer" | "counteroffer" | "accept" | "decline" | "announcement" | "seller_review" | "reject"; price?: number; explanation: string; explanation_ar?: string };
 export type SellerStatus = "ready" | "negotiating" | "agreed" | "rejected" | "excluded" | "awaiting_seller" | "declined";
 export const sellerStatusLabels: Record<SellerStatus, string> = { ready: "Ready", negotiating: "Negotiating", agreed: "Agreed", rejected: "Rejected", excluded: "Excluded", awaiting_seller: "Waiting for Seller decision", declined: "No agreement" };
-type SellerState = { sellerAccountId: number; inventory: Inventory; status: SellerStatus; reason: string; currentPrice?: number; agreedPrice?: number; history: Message[] };
+type SellerState = { sellerAccountId: number; inventory: Inventory; status: SellerStatus; reason: string; currentPrice?: number; agreedPrice?: number; pendingOffer?: number; history: Message[] };
 type PendingRound = { target: CompetitiveSession; events: { sellerId: string; message: Message }[]; index: number };
-export type CompetitiveSession = { productId: number; productName: string; catalogId: string; pending?: PendingRound; buyerId: number; requirements: Requirements; round: number; phase: "running" | "review" | "approved" | "rejected" | "cancelled"; stopReason?: string; sellers: SellerState[]; announcements: { round: number; price: number; eligibleCount: number }[]; approvedSellerId?: string };
-export type SellerView = { productId?:number;productName?:string;description?:string;matchKey?:string; catalogId: string; id: string; name: string; exactProduct: boolean; startingPrice: number; stock: number; deliveryDays: number; participates: boolean; status: SellerStatus; reason: string; currentPrice?: number; agreedPrice?: number; pendingOffer?: number; history: Message[] };
+export type CompetitiveSession = { productId: number; productName: string; catalogId: string; pending?: PendingRound; buyerId: number; requirements: Requirements; round: number; phase: "running" | "review" | "approved" | "rejected" | "cancelled"; stopReason?: string; sellers: SellerState[]; announcements: { round: number; price: number; eligibleCount: number }[]; approvedSellerId?: string; matchingPolicy?: string; selectedProductIds?: number[] | null };
+export type SellerView = { productId?:number;productName?:string;description?:string;matchKey?:string;sellerMode?:NegotiationMode; catalogId: string; id: string; name: string; exactProduct: boolean; startingPrice: number; stock: number; deliveryDays: number; participates: boolean; status: SellerStatus; reason: string; currentPrice?: number; agreedPrice?: number; pendingOffer?: number; history: Message[] };
 export type CompetitiveView = Omit<CompetitiveSession, "sellers" | "pending"> & { completedRounds: number; sellers: SellerView[] };
 const cents = (value: number) => Math.round(value * 100);
 const currency = (value: number) => `${value.toFixed(2)} SAR`;
@@ -50,7 +50,7 @@ export function requirementsFor(product: Product): Requirements {
     if(realMode){const price=Number(product.base_price);return {quantity:1,targetPrice:Math.max(.01,Math.floor(price*80)/100),maximumPrice:Math.max(.01,Math.floor(price*95)/100),deliveryDays:7,maxRounds:6,mode:"semi_automated"};}
     if (product.id === competitiveProductId) return { ...defaultRequirements };
     const price = Number(product.base_price);
-    return { quantity: 1, targetPrice: Math.max(.01, Math.round(price * .85 * 100) / 100), maximumPrice: Math.max(.01, Math.round(price * .92 * 100) / 100), deliveryDays: 7, maxRounds: 6 };
+    return { quantity: 1, targetPrice: Math.max(.01, Math.round(price * .85 * 100) / 100), maximumPrice: Math.max(.01, Math.round(price * .92 * 100) / 100), deliveryDays: 7, maxRounds: 6, mode: "semi_automated" };
 }
 export function inventoryFor(product: Product): Inventory[] {
     const key = catalogIdentity(product.id), price = Number(product.base_price);
@@ -59,18 +59,18 @@ export function inventoryFor(product: Product): Inventory[] {
     if (product.id === competitiveProductId) return inventory.filter(i => i.productKey === key).map(i => i.id === "riyadh" ? { ...i, ownerSellerId: product.seller_id, startingPrice: price, minimumPrice: amount(4050 / 4700), stock: product.stock_quantity } : { ...i });
     const primaryStores: Record<number, { key: string; name: string }> = { 1: { key: "riyadh-direct", name: "Riyadh Direct Store" }, 2: { key: "sara-home", name: "Sara Home Store" }, 3: { key: "khalid-direct", name: "Khalid Direct Store" } };
     const primaryStore = primaryStores[product.seller_id] ?? { key: `account-${product.seller_id}-direct`, name: `Seller ${product.seller_id} Direct Store` };
-    const own: Inventory = { storefrontKey: primaryStore.key, ownerSellerId: product.seller_id, id: `p${product.id}-listing`, name: primaryStore.name, productKey: key, startingPrice: price, minimumPrice: amount(.85), stock: product.stock_quantity, deliveryDays: 5, concession: amount(.04) };
+    const own: Inventory = { storefrontKey: primaryStore.key, ownerSellerId: product.seller_id, id: `p${product.id}-listing`, name: primaryStore.name, productKey: key, startingPrice: price, minimumPrice: amount(.85), stock: product.stock_quantity, deliveryDays: 5, concession: amount(.04), sellerMode: "semi_automated" };
     // New locally-created listings have only their registered owner. Do not infer alternate sellers.
     if (!catalogIds[product.id]) return [own];
     return [own,
-        { storefrontKey: "red-palm", ownerSellerId: 2, id: `p${product.id}-alternative`, name: "Red Palm Store", productKey: key, startingPrice: amount(.97), minimumPrice: amount(.82), stock: 8, deliveryDays: 6, concession: amount(.04) },
-        { storefrontKey: "eastern-market", ownerSellerId: 3, id: `p${product.id}-late`, name: "Eastern Market", productKey: key, startingPrice: amount(.95), minimumPrice: amount(.84), stock: 12, deliveryDays: 10, concession: amount(.04) },
-        { storefrontKey: "prime", ownerSellerId: 1, id: `p${product.id}-premium`, name: "Prime Store", productKey: key, startingPrice: amount(1.02), minimumPrice: amount(.96), stock: 10, deliveryDays: 4, concession: amount(.04) },
-        { storefrontKey: "najd-outlet", ownerSellerId: 2, id: `p${product.id}-limited`, name: "Najd Outlet", productKey: key, startingPrice: amount(.94), minimumPrice: amount(.83), stock: 0, deliveryDays: 3, concession: amount(.04) },
+        { storefrontKey: "red-palm", ownerSellerId: 2, id: `p${product.id}-alternative`, name: "Red Palm Store", productKey: key, startingPrice: amount(.97), minimumPrice: amount(.82), stock: 8, deliveryDays: 6, concession: amount(.04), sellerMode: "semi_automated" },
+        { storefrontKey: "eastern-market", ownerSellerId: 3, id: `p${product.id}-late`, name: "Eastern Market", productKey: key, startingPrice: amount(.95), minimumPrice: amount(.84), stock: 12, deliveryDays: 10, concession: amount(.04), sellerMode: "semi_automated" },
+        { storefrontKey: "prime", ownerSellerId: 1, id: `p${product.id}-premium`, name: "Prime Store", productKey: key, startingPrice: amount(1.02), minimumPrice: amount(.96), stock: 10, deliveryDays: 4, concession: amount(.04), sellerMode: "semi_automated" },
+        { storefrontKey: "najd-outlet", ownerSellerId: 2, id: `p${product.id}-limited`, name: "Najd Outlet", productKey: key, startingPrice: amount(.94), minimumPrice: amount(.83), stock: 0, deliveryDays: 3, concession: amount(.04), sellerMode: "semi_automated" },
     ];
 }
 function exclusionReason(i: Inventory, r: Requirements) {
-    if (i.enabled === false) return "Excluded: this Seller Agent is disabled.";
+    if (i.enabled === false && i.sellerMode !== "nil") return "Excluded: this Seller Agent is disabled.";
     if (i.stock < r.quantity) return `Excluded: ${i.stock} units in stock; ${r.quantity} required.`;
     if (i.deliveryDays > r.deliveryDays) return `Excluded: delivery takes ${i.deliveryDays} days; deadline is ${r.deliveryDays} days.`;
     return "";
@@ -78,15 +78,19 @@ function exclusionReason(i: Inventory, r: Requirements) {
 export function sellerCatalog(product: Product, requirements: Requirements): SellerView[] {
     return inventoryFor(product).filter(i => i.productKey === catalogIdentity(product.id)).map(i => {
         const reason = exclusionReason(i, requirements);
-        return { catalogId: i.productKey, id: i.id, name: i.name, exactProduct: true, startingPrice: i.startingPrice, stock: i.stock, deliveryDays: i.deliveryDays,
+        return { catalogId: i.productKey, id: i.id, name: i.name, exactProduct: true, startingPrice: i.startingPrice, stock: i.stock, deliveryDays: i.deliveryDays, sellerMode: i.sellerMode ?? "semi_automated",
             participates: !reason, status: reason ? "excluded" : "ready", reason: reason || "Ready: exact catalog ID, quantity and delivery all match.", history: [] };
     });
 }
-export function createCompetitiveSession(requirements: Requirements, buyerId: number, product: Product = competitiveProduct, configured?: Inventory[]): CompetitiveSession {
+export function createCompetitiveSession(requirements: Requirements, buyerId: number, product: Product = competitiveProduct, configured?: Inventory[], matchingPolicy?: string, selectedProductIds?: number[] | null): CompetitiveSession {
     const error = validateRequirements(requirements); if (error) throw new Error(error);
     if (!Number.isInteger(buyerId) || buyerId < 1) throw new Error("A demo Buyer identity is required.");
     const catalogId = catalogIdentity(product.id);
-    return { productId: product.id, productName: product.name, catalogId, buyerId, requirements: { ...requirements }, round: 0, phase: "running", announcements: [], sellers: (configured ?? inventoryFor(product)).filter(i => i.productKey === catalogId).map(i => {
+    const list = configured ?? inventoryFor(product);
+    const filtered = matchingPolicy === "single-listing"
+        ? list.filter((i, idx) => idx === 0)
+        : list.filter(i => i.productKey === catalogId);
+    return { productId: product.id, productName: product.name, catalogId, buyerId, requirements: { ...requirements }, round: 0, phase: "running", announcements: [], matchingPolicy, selectedProductIds, sellers: filtered.map(i => {
         const reason = exclusionReason(i, requirements);
         return { sellerAccountId: i.ownerSellerId, inventory: { ...i }, status: reason ? "excluded" : "negotiating", reason: reason || "Waiting for the Buyer Agent's opening offer.", history: [] };
     }) };
@@ -107,7 +111,7 @@ export function advanceCompetitiveRound(input: CompetitiveSession): CompetitiveS
     const max = cents(r.maximumPrice), target = cents(r.targetPrice);
     for (let index = 0; index < s.sellers.length; index++) {
         const seller = s.sellers[index];
-        if (seller.status === "excluded" || seller.status === "rejected") continue;
+        if (seller.status === "excluded" || seller.status === "rejected" || seller.status === "declined" || seller.status === "awaiting_seller") continue;
         const own = seller.inventory;
         if (s.round > (own.maxRounds ?? r.maxRounds)) continue;
         if (!eligible(seller, r, s.catalogId)) {
@@ -124,6 +128,12 @@ export function advanceCompetitiveRound(input: CompetitiveSession): CompetitiveS
         const proposed = Math.min(target + Math.floor((max - target) * progress), seller.currentPrice === undefined ? max : cents(seller.currentPrice));
         const buyerPrice = proposed / 100;
         seller.history.push({ round: s.round, agent: "Buyer Agent", action: "offer", price: buyerPrice, explanation: s.round === 1 ? `Opening at the requested target for ${r.quantity} units, delivered within ${r.deliveryDays} days.` : "Revising the proposal while considering the latest public offers and requested terms." });
+        if (own.sellerMode === "nil") {
+            seller.status = "awaiting_seller";
+            seller.pendingOffer = buyerPrice;
+            seller.reason = "Manual seller mode (Nil): waiting for Seller counteroffer or acceptance.";
+            continue;
+        }
         const previous = seller.currentPrice;
         const scheduled = sellerCounteroffer(own, s.round, previous);
         const price = sellerCounteroffer(own, s.round, previous, own.strategy === "steady" ? undefined : bestCompeting);
@@ -138,6 +148,7 @@ export function advanceCompetitiveRound(input: CompetitiveSession): CompetitiveS
     }
     const current = s.sellers.filter(seller => eligible(seller, r, s.catalogId) && seller.currentPrice !== undefined && cents(seller.currentPrice) <= max);
     if (current.length) s.announcements.push({ round: s.round, price: Math.min(...current.map(seller => seller.currentPrice!)), eligibleCount: current.length });
+    if (s.sellers.some(seller => seller.status === "awaiting_seller")) return s;
     const competingSellers = s.sellers.filter(seller => seller.status === "negotiating" || seller.status === "agreed");
     const improved = s.sellers.some((seller, i) => seller.currentPrice !== undefined && (input.sellers[i].currentPrice === undefined || cents(seller.currentPrice) < cents(input.sellers[i].currentPrice!)));
     if (!competingSellers.length || s.round >= r.maxRounds || (s.round > 1 && !improved)) {
@@ -150,8 +161,8 @@ export function advanceCompetitiveRound(input: CompetitiveSession): CompetitiveS
 export function competitiveView(session: CompetitiveSession, buyerId: number): CompetitiveView | null {
     if (session.buyerId !== buyerId) return null;
     // Explicit allowlist: no inventory object, minimumPrice or concession strategy reaches a view.
-    return { productId: session.productId, productName: session.productName, catalogId: session.catalogId, completedRounds: session.pending ? session.round - 1 : session.round, buyerId: session.buyerId, requirements: { ...session.requirements }, round: session.round, phase: session.phase, stopReason: session.stopReason, approvedSellerId: session.approvedSellerId,
-        announcements: structuredClone(session.announcements), sellers: session.sellers.map(s => ({ catalogId: s.inventory.productKey, id: s.inventory.id, name: s.inventory.name, exactProduct: s.inventory.productKey === session.catalogId, startingPrice: s.inventory.startingPrice, stock: s.inventory.stock, deliveryDays: s.inventory.deliveryDays, participates: s.status !== "excluded", status: s.status, reason: s.reason, currentPrice: s.currentPrice, agreedPrice: s.agreedPrice, history: structuredClone(s.history) })) };
+    return { productId: session.productId, productName: session.productName, catalogId: session.catalogId, completedRounds: session.pending ? session.round - 1 : session.round, buyerId: session.buyerId, requirements: { ...session.requirements }, round: session.round, phase: session.phase, stopReason: session.stopReason, approvedSellerId: session.approvedSellerId, matchingPolicy: session.matchingPolicy, selectedProductIds: session.selectedProductIds,
+        announcements: structuredClone(session.announcements), sellers: session.sellers.map(s => ({ catalogId: s.inventory.productKey, id: s.inventory.id, name: s.inventory.name, exactProduct: s.inventory.productKey === session.catalogId, startingPrice: s.inventory.startingPrice, stock: s.inventory.stock, deliveryDays: s.inventory.deliveryDays, sellerMode: s.inventory.sellerMode ?? "semi_automated", participates: s.status !== "excluded", status: s.status, reason: s.reason, currentPrice: s.currentPrice, agreedPrice: s.agreedPrice, pendingOffer: s.pendingOffer, history: structuredClone(s.history) })) };
 }
 export function rankedOffers(view: CompetitiveView) {
     return view.sellers.filter(s => s.status === "agreed" && s.stock >= view.requirements.quantity && s.deliveryDays <= view.requirements.deliveryDays && s.agreedPrice !== undefined && s.agreedPrice <= view.requirements.maximumPrice)
@@ -162,8 +173,8 @@ export function approveCompetitiveOffer(input: CompetitiveSession, sellerId: str
     const view = competitiveView(input, buyerId)!;
     if (!rankedOffers(view).some(s => s.id === sellerId)) return input;
     const seller = input.sellers.find(s => s.inventory.id === sellerId)!;
-    const pair = seller.history.slice(-2);
-    if (pair.length !== 2 || pair[0].agent !== "Buyer Agent" || pair[1].agent !== "Seller Agent" || !pair.every(m => m.action === "accept" && m.price === seller.agreedPrice) || cents(seller.agreedPrice!) < cents(seller.inventory.minimumPrice)) return input;
+    const last = seller.history.at(-1);
+    if (!last || last.action !== "accept" || last.price !== seller.agreedPrice || cents(seller.agreedPrice!) < cents(seller.inventory.minimumPrice)) return input;
     return { ...input, phase: "approved", approvedSellerId: sellerId };
 }
 
@@ -190,14 +201,87 @@ export function advanceCompetitiveStep(input: CompetitiveSession): CompetitiveSe
     const lastForSeller = !pending.events.slice(pending.index).some(e => e.sellerId === event.sellerId);
     if (lastForSeller) {
         const result = pending.target.sellers.find(s => s.inventory.id === event.sellerId)!;
-        seller.status = result.status; seller.agreedPrice = result.agreedPrice; seller.reason = result.reason;
+        seller.status = result.status; seller.agreedPrice = result.agreedPrice; seller.reason = result.reason; seller.pendingOffer = result.pendingOffer;
     }
     return pending.index === pending.events.length ? pending.target : next;
+}
+
+export function manualBuyerOfferLocal(input: CompetitiveSession, price: number, note?: string, listingId?: string, action: "offer" | "accept" = "offer"): CompetitiveSession {
+    if (input.phase !== "running") return input;
+    const s = structuredClone(input), r = s.requirements;
+    const pVal = Math.round(price * 100) / 100;
+    if (pVal <= 0 || pVal > r.maximumPrice) return input;
+    if (s.round < r.maxRounds) s.round += 1;
+    const n = s.round;
+    for (const seller of s.sellers) {
+        if (seller.status === "excluded" || seller.status === "rejected" || seller.status === "declined") continue;
+        if (listingId && seller.inventory.id !== listingId) continue;
+        const own = seller.inventory;
+        if (action === "accept" && seller.currentPrice !== undefined && seller.currentPrice <= r.maximumPrice) {
+            const agreed = seller.currentPrice;
+            seller.history.push({ round: n, agent: "Buyer Agent", action: "accept", price: agreed, explanation: note?.trim() || "I accept your current counteroffer." }, { round: n, agent: "Seller Agent", action: "accept", price: agreed, explanation: "Confirmed agreement at the accepted price." });
+            seller.agreedPrice = agreed; seller.status = "agreed";
+            seller.reason = "Buyer manually accepted the seller's offer.";
+            continue;
+        }
+        seller.history.push({ round: n, agent: "Buyer Agent", action: "offer", price: pVal, explanation: note?.trim() || `Manual buyer offer of ${currency(pVal)}.` });
+        if (own.sellerMode === "nil") {
+            seller.status = "awaiting_seller";
+            seller.pendingOffer = pVal;
+            seller.reason = "Waiting for manual Seller response.";
+            continue;
+        }
+        const counter = sellerCounteroffer(own, n, seller.currentPrice);
+        if (cents(pVal) >= cents(counter)) {
+            seller.currentPrice = pVal; seller.agreedPrice = pVal; seller.status = "agreed";
+            seller.history.push({ round: n, agent: "Seller Agent", action: "accept", price: pVal, explanation: "I accept your manual offer for the requested terms." });
+            seller.reason = "Seller Agent accepted your manual offer.";
+        } else {
+            seller.currentPrice = counter; seller.status = "negotiating";
+            seller.history.push({ round: n, agent: "Seller Agent", action: "counteroffer", price: counter, explanation: "Counteroffer within my configured limits." });
+        }
+    }
+    if (!s.sellers.some(x => x.status === "awaiting_seller") && (s.round >= r.maxRounds || s.sellers.every(x => x.status === "agreed" || x.status === "excluded" || x.status === "rejected" || x.status === "declined"))) {
+        s.phase = "review";
+        s.stopReason = "Negotiation rounds completed. Review eligible offers.";
+    }
+    return s;
+}
+
+export function sellerDecideLocal(input: CompetitiveSession, listingId: string, sellerId: number, decision: "accept" | "reject" | "counter", counterPrice?: number, note?: string): CompetitiveSession {
+    const s = structuredClone(input);
+    const seller = s.sellers.find(x => x.inventory.id === listingId && x.sellerAccountId === sellerId);
+    if (!seller || s.phase !== "running") return input;
+    const n = Math.max(1, s.round);
+    const pending = seller.pendingOffer ?? seller.currentPrice ?? seller.inventory.startingPrice;
+    if (decision === "accept") {
+        seller.history.push({ round: n, agent: "Seller", action: "accept", price: pending, explanation: note?.trim() || "The seller accepted the buyer's offer." });
+        seller.currentPrice = pending; seller.agreedPrice = pending; seller.status = "agreed"; seller.pendingOffer = undefined;
+        seller.reason = "The seller accepted the buyer's offer.";
+    } else if (decision === "reject") {
+        seller.history.push({ round: n, agent: "Seller", action: "reject", price: pending, explanation: note?.trim() || "The seller rejected the buyer's offer." });
+        seller.status = "declined"; seller.pendingOffer = undefined;
+        seller.reason = "The seller rejected the buyer's offer.";
+    } else if (decision === "counter" && counterPrice !== undefined) {
+        const cVal = Math.max(seller.inventory.minimumPrice, Math.round(counterPrice * 100) / 100);
+        seller.history.push({ round: n, agent: "Seller", action: "counteroffer", price: cVal, explanation: note?.trim() || `Manual seller counteroffer at ${currency(cVal)}.` });
+        seller.currentPrice = cVal; seller.status = "negotiating"; seller.pendingOffer = undefined;
+        if (cVal <= s.requirements.maximumPrice && s.requirements.mode !== "nil") {
+            seller.history.push({ round: n, agent: "Buyer Agent", action: "accept", price: cVal, explanation: "I accept your counteroffer within the authorized limits." });
+            seller.agreedPrice = cVal; seller.status = "agreed";
+        }
+    }
+    if (!s.sellers.some(x => x.status === "awaiting_seller") && (s.round >= s.requirements.maxRounds || s.sellers.every(x => ["agreed", "declined", "excluded", "rejected"].includes(x.status)))) {
+        s.phase = "review";
+        s.stopReason = "Seller decision recorded. Compare the final results.";
+    }
+    return s;
 }
 
 // Every inventory record explicitly declares its owning demo Seller account.
 export type SellerCompetitiveSession = {
     id: string; productId: number; productName: string; buyerId: number; storefrontId: string; storefrontKey: string; storefrontName: string;
+    sellerMode?: NegotiationMode;
     requirements: Pick<Requirements, "quantity" | "targetPrice" | "deliveryDays">;
     round: number; maxRounds: number; phase: CompetitiveSession["phase"]; status: SellerStatus;
     startingPrice: number; minimumPrice: number; currentPrice?: number; agreedPrice?: number; stock: number; deliveryDays: number;
@@ -209,13 +293,12 @@ export function sellerCompetitiveViews(session: CompetitiveSession, sellerAccoun
         id: `${session.buyerId}-${session.productId}-${s.inventory.id}`,
         productId: session.productId, productName: session.productName, buyerId: session.buyerId,
         storefrontId: s.inventory.id, storefrontKey: s.inventory.storefrontKey, storefrontName: s.inventory.name,
+        sellerMode: s.inventory.sellerMode ?? "semi_automated",
         requirements: { quantity: session.requirements.quantity, targetPrice: session.requirements.targetPrice, deliveryDays: session.requirements.deliveryDays },
         round: session.round, maxRounds: session.requirements.maxRounds, phase: session.phase, status: s.status,
-        startingPrice: s.inventory.startingPrice, minimumPrice: s.inventory.minimumPrice, currentPrice: s.currentPrice, agreedPrice: s.agreedPrice,
+        startingPrice: s.inventory.startingPrice, minimumPrice: s.inventory.minimumPrice, currentPrice: s.currentPrice, agreedPrice: s.agreedPrice, pendingOffer: s.pendingOffer,
         stock: s.inventory.stock, deliveryDays: s.inventory.deliveryDays,
         approval: session.phase !== "approved" ? "pending" : session.approvedSellerId === s.inventory.id ? "selected" : "not_selected",
-        // Only messages delivered to this storefront, verbatim. Announcements are
-        // already anonymous in engine state; no global market snapshot is exposed.
         history: structuredClone(s.history),
         announcements: structuredClone(s.history.filter(m => m.agent === "Market update"))
     }));

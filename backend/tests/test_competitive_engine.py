@@ -68,4 +68,29 @@ class SemiAutomatedTests(unittest.TestCase):
   s=self.run_all({**self.r,"mode":"automated"});self.assertEqual(s["phase"],"review");self.assertEqual(s["sellers"][1]["status"],"declined")
  def test_invalid_mode(self):
   with self.assertRaises(ValueError):engine.create({"id":1,"name":"Phone"},9,{**self.r,"mode":"manual"},self.listings)
+class NilAndCrossModeTests(unittest.TestCase):
+ """Verify Nil (manual) buyer/seller modes, cross-mode combinations, and Arabic explanations."""
+ def setUp(self):
+  self.r={"quantity":1,"targetPrice":3200,"maximumPrice":3600,"deliveryDays":7,"maxRounds":6,"mode":"nil"}
+  self.listings=[
+   {"id":"s1","catalogId":"x","name":"Seller 1","sellerId":1,"startingPrice":3800,"minimumPrice":3400,"stock":5,"deliveryDays":3,"concession":100,"sellerMode":"automated"},
+   {"id":"s2","catalogId":"x","name":"Seller 2","sellerId":2,"startingPrice":3850,"minimumPrice":3450,"stock":5,"deliveryDays":3,"concession":100,"sellerMode":"nil"},
+  ]
+ def test_nil_buyer_does_not_auto_step(self):
+  s=engine.create({"id":1,"name":"Phone"},9,self.r,self.listings)
+  self.assertEqual(engine.step(s)["round"],0)
+ def test_nil_buyer_manual_offer_and_nil_seller_counter(self):
+  s=engine.create({"id":1,"name":"Phone"},9,self.r,self.listings)
+  s=engine.buyer_manual_offer(s,3450,"Manual offer from buyer")
+  self.assertEqual(s["round"],1)
+  # Seller 2 is in Nil mode -> waits for manual seller response
+  self.assertEqual(s["sellers"][1]["status"],"awaiting_seller")
+  self.assertTrue(all("explanation_ar" in m for m in s["sellers"][0]["history"]))
+  # Seller 2 sends a manual counteroffer at 3550
+  s=engine.seller_decide(s,"s2",2,"counter",3550,"Best manual price")
+  self.assertEqual(s["sellers"][1]["currentPrice"],3550)
+  # Buyer accepts Seller 2's manual counteroffer
+  s=engine.buyer_manual_offer(s,3550,"Accepted","s2","accept")
+  self.assertEqual(s["sellers"][1]["status"],"agreed")
+  self.assertEqual(s["sellers"][1]["agreedPrice"],3550)
 if __name__=="__main__":unittest.main()

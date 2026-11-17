@@ -13,8 +13,28 @@ def cents(value, upward=False):
 
 def now(): return datetime.now(timezone.utc).isoformat()
 
-MODES=("semi_automated","automated")
+MODES=("nil","semi_automated","automated")
 OPEN_STATUSES=("ready","negotiating")
+
+def ar_fallback(action, agent, price=None, round_num=1, competing=False):
+    p_str = f"{price:,.2f} ر.س" if price is not None else ""
+    if agent in ("Buyer Agent", "Buyer"):
+        if action == "accept":
+            return f"أوافق على العرض المقابل بسعر {p_str} للكمية وشروط التوصيل المطلوبة."
+        if round_num == 1:
+            return f"عرض افتتاحي بسعر مستهدف {p_str} للكمية وشروط التوصيل المحددة."
+        return f"يمكنني رفع عرضي إلى {p_str} ضمن حدود الشراء المعتمدة."
+    if agent in ("Seller Agent", "Seller"):
+        if action == "accept":
+            return f"أوافق على عرض المشتري بسعر {p_str} مع الالتزام بالكمية ومدة التوصيل."
+        if action == "reject" or action == "decline":
+            return "تم رفض العرض لعدم توافقه مع الحدود السعرية المعتمدة للبائع."
+        if competing:
+            return f"تم تحسين العرض المقابل إلى {p_str} للمنافسة مع عروض السوق الأخرى."
+        return f"عرض مقابل بسعر {p_str} للكمية وشروط التوصيل المطلوبة."
+    if agent == "Market update":
+        return f"عرض تنافسي مؤهل في السوق بسعر {p_str} (هوية البائع وحدوده السرية محجوبة)."
+    return "تحديث من النظام حول حالة التفاوض."
 
 def requirements(raw):
     q=raw.get("quantity"); rounds=raw.get("maxRounds"); days=raw.get("deliveryDays")
@@ -25,14 +45,17 @@ def requirements(raw):
     if not 0<target<=maximum<=100000000: raise ValueError("Check target price and maximum price.")
     if Decimal(str(raw["targetPrice"]))*100!=target or Decimal(str(raw["maximumPrice"]))*100!=maximum: raise ValueError("Use prices with at most two decimal places.")
     mode=raw.get("mode","semi_automated")
-    if mode not in MODES: raise ValueError("Mode must be semi_automated or automated.")
+    if mode not in MODES: raise ValueError("Mode must be nil, semi_automated or automated.")
     return {"quantity":q,"targetPrice":target/100,"maximumPrice":maximum/100,"deliveryDays":days,"maxRounds":rounds,"mode":mode}
 
 def create(product,buyer_id,raw,listings):
     r=requirements(raw); sellers=[]
     for source in listings:
         s=deepcopy(source); reason="Ready"
-        if not s.get("enabled",True): reason="Seller Agent disabled"
+        s_mode = s.get("sellerMode", "semi_automated")
+        if s_mode not in MODES: s_mode = "semi_automated"
+        s["sellerMode"] = s_mode
+        if not s.get("enabled",True) and s_mode != "nil": reason="Seller Agent disabled"
         elif s["stock"]<r["quantity"]: reason="Insufficient stock"
         elif not s.get("deliveryDays") or s["deliveryDays"]>r["deliveryDays"]: reason="Delivery unavailable or exceeds deadline"
         excluded=reason!="Ready"
@@ -49,26 +72,114 @@ def finish_if_done(e):
         e["phase"]="review";e["stopReason"]="All Seller Agents finished or the round limit was reached."
     return e
 
-def seller_decide(engine,listing_id,seller_id,decision):
-    """Semi-automated mode: the seller accepts or rejects the buyer's final offer."""
+def seller_decide(engine,listing_id,seller_id,decision,counter_price=None,note=None):
+    """Semi-automated or Nil mode: the seller accepts, rejects, or sends a manual counteroffer."""
     e=deepcopy(engine)
     s=next((s for s in e["sellers"] if s["id"]==listing_id and s["sellerId"]==seller_id),None)
     if not s: raise PermissionError("This listing is not part of your negotiations.")
-    if e["phase"]!="running" or s["status"]!="awaiting_seller": raise LookupError("No decision is pending for this listing.")
-    price=s["pendingOffer"]
+    if e["phase"]!="running" or s["status"] not in ("awaiting_seller","ready","negotiating"):
+        raise LookupError("No decision is pending for this listing.")
+    price=s.get("pendingOffer") or (s["history"][-1].get("price") if s["history"] else s["startingPrice"])
     if decision=="accept":
-        s["history"].append({"round":e["round"],"agent":"Seller","action":"accept","price":price,"explanation":"The seller accepted the buyer's final offer.","timestamp":now()})
+        text = note.strip() if note and note.strip() else "The seller accepted the buyer's offer."
+        s["history"].append({"round":max(1,e["round"]),"agent":"Seller","action":"accept","price":price,"explanation":text,"explanation_ar":ar_fallback("accept","Seller",price,max(1,e["round"])),"timestamp":now()})
         s.update(status="agreed",currentPrice=price,agreedPrice=price,sellerDecision="accept",reason="The seller accepted the buyer's final offer")
+        s.pop("pendingOffer",None)
     elif decision=="reject":
-        s["history"].append({"round":e["round"],"agent":"Seller","action":"reject","price":price,"explanation":"The seller rejected the buyer's final offer.","timestamp":now()})
+        text = note.strip() if note and note.strip() else "The seller rejected the buyer's final offer."
+        s["history"].append({"round":max(1,e["round"]),"agent":"Seller","action":"reject","price":price,"explanation":text,"explanation_ar":ar_fallback("reject","Seller",price,max(1,e["round"])),"timestamp":now()})
         s.update(status="declined",sellerDecision="reject",reason="The seller rejected the buyer's final offer")
-    else: raise ValueError("Decision must be accept or reject.")
-    s.pop("pendingOffer",None);e["updatedAt"]=now()
+        s.pop("pendingOffer",None)
+    elif decision=="counter" and counter_price is not None:
+        c_val = cents(counter_price)/100
+        floor = cents(s["minimumPrice"],True)/100
+        if c_val < floor:
+            raise ValueError("Counteroffer cannot be below your minimum acceptable price.")
+        text = note.strip() if note and note.strip() else f"Manual seller counteroffer at {c_val:,.2f} SAR."
+        r_num = max(1, e["round"])
+        s["history"].append({"round":r_num,"agent":"Seller","action":"counteroffer","price":c_val,"explanation":text,"explanation_ar":ar_fallback("counteroffer","Seller",c_val,r_num),"timestamp":now()})
+        s.update(status="negotiating",currentPrice=c_val,reason="Manual counteroffer sent by Seller")
+        s.pop("pendingOffer",None)
+        if c_val <= e["requirements"]["maximumPrice"] and e["requirements"].get("mode") != "nil":
+            s["history"].append({"round":r_num,"agent":"Buyer Agent","action":"accept","price":c_val,"explanation":"I accept your counteroffer within the authorized purchase limits.","explanation_ar":ar_fallback("accept","Buyer Agent",c_val,r_num),"timestamp":now()})
+            s.update(status="agreed",agreedPrice=c_val,reason="Both parties accepted the same price")
+    else: raise ValueError("Decision must be accept, reject, or counter with a valid price.")
+    e["updatedAt"]=now()
+    return finish_if_done(e)
+
+def buyer_manual_offer(engine, offer_price, note=None, listing_id=None, action="offer"):
+    """Nil (Manual) buyer mode: the human buyer submits a manual offer or accepts a seller's quote."""
+    e = deepcopy(engine)
+    if e["phase"] != "running":
+        raise LookupError("This session is not running.")
+    r = e["requirements"]
+    p_val = cents(offer_price) / 100
+    if p_val <= 0 or p_val > r["maximumPrice"]:
+        raise ValueError("Manual offer must be positive and within your maximum budget.")
+    if e["round"] < r["maxRounds"]:
+        e["round"] += 1
+    n = e["round"]
+    targets = [s for s in e["sellers"] if s["participates"] and (listing_id is None or s["id"] == listing_id) and s["status"] not in ("agreed", "declined", "excluded")]
+    if not targets:
+        raise LookupError("No active seller listings available for a manual offer.")
+    prior = {s["id"]: s.get("currentPrice") for s in e["sellers"] if s["participates"] and s.get("currentPrice") is not None and s["status"] not in ("declined", "excluded")}
+    for s in targets:
+        limit = min(r["maxRounds"], s.get("maxRounds", r["maxRounds"]))
+        if n > limit:
+            s.update(status="declined", reason="Maximum rounds exhausted")
+            continue
+        floor = cents(s["minimumPrice"], True) / 100
+        if action == "accept" and s.get("currentPrice") is not None and s["currentPrice"] <= r["maximumPrice"]:
+            agreed_p = s["currentPrice"]
+            text = note.strip() if note and note.strip() else "I accept your current offer."
+            s["history"].append({"round": n, "agent": "Buyer Agent", "action": "accept", "price": agreed_p, "explanation": text, "explanation_ar": ar_fallback("accept", "Buyer", agreed_p, n), "timestamp": now()})
+            s.update(status="agreed", agreedPrice=agreed_p, reason="Buyer manually accepted the seller's offer")
+            continue
+        text = note.strip() if note and note.strip() else f"Manual buyer offer of {p_val:,.2f} SAR."
+        s["history"].append({"round": n, "agent": "Buyer Agent", "action": "offer", "price": p_val, "explanation": text, "explanation_ar": ar_fallback("offer", "Buyer", p_val, n), "timestamp": now()})
+        s_mode = s.get("sellerMode", "semi_automated")
+        if s_mode == "nil":
+            s.update(status="awaiting_seller", pendingOffer=p_val, reason="Waiting for manual response from Seller")
+            continue
+        starting = cents(s["startingPrice"])
+        concession = max(1, cents(s.get("concession", max(0.01, s["startingPrice"] * 0.04))))
+        competitor = min((cents(p) for key, p in prior.items() if key != s["id"]), default=None)
+        seller_agent = SellerAgent(SellerContext(
+            asking_price=Decimal(str(s["startingPrice"])),
+            minimum_price=Decimal(str(s["minimumPrice"])),
+            concession=Decimal(concession) / 100,
+        ))
+        seller = seller_agent.decide(
+            current_buyer_offer=Decimal(str(p_val)),
+            previous_seller_price=Decimal(str(s["currentPrice"])) if s.get("currentPrice") is not None else None,
+            competing_price=Decimal(competitor) / 100 if competitor is not None and s.get("strategy", "competitive") == "competitive" else None,
+            round_number=n,
+            max_rounds=limit,
+        )
+        ctx = {"product": s.get("productName") or e["productName"], "round": n, "max_rounds": limit}
+        if seller.action == "accept" and p_val >= floor:
+            if s_mode == "semi_automated":
+                s["history"].append({"round": n, "agent": "System", "action": "seller_review", "price": p_val, "explanation": "Buyer offer meets seller terms. Waiting for Seller confirmation.", "explanation_ar": ar_fallback("seller_review", "System", p_val, n), "timestamp": now()})
+                s.update(status="awaiting_seller", pendingOffer=p_val, reason="Waiting for the seller to confirm or reject the offer")
+            else:
+                fb = "I accept the Buyer offer and the requested quantity and delivery."
+                s["history"].append({"round": n, "agent": "Seller Agent", "action": "accept", "price": p_val, "explanation": seller_agent.respond(seller, fb, ctx), "explanation_ar": ar_fallback("accept", "Seller Agent", p_val, n), "timestamp": now()})
+                s.update(currentPrice=p_val, agreedPrice=p_val, status="agreed", reason="Seller Agent accepted the manual buyer offer")
+        else:
+            counter = cents(seller.price) / 100
+            fb = "Counteroffer for the requested quantity and delivery."
+            s["history"].append({"round": n, "agent": "Seller Agent", "action": "counteroffer", "price": counter, "explanation": seller_agent.respond(seller, fb, ctx), "explanation_ar": ar_fallback("counteroffer", "Seller Agent", counter, n), "timestamp": now()})
+            s.update(currentPrice=counter, status="negotiating", reason="Negotiating")
+            if s_mode == "semi_automated" and p_val >= r["maximumPrice"] and counter > r["maximumPrice"]:
+                s["history"].append({"round": n, "agent": "System", "action": "seller_review", "price": p_val, "explanation": "The buyer reached their final offer. The seller was notified to accept or reject it.", "explanation_ar": ar_fallback("seller_review", "System", p_val, n), "timestamp": now()})
+                s.update(status="awaiting_seller", pendingOffer=p_val, reason="Waiting for the seller to accept or reject the buyer's final offer")
+    e["updatedAt"] = now()
     return finish_if_done(e)
 
 def step(engine):
     e=deepcopy(engine)
     if e["phase"]!="running" or e.get("paused"): return e
+    if e["requirements"].get("mode")=="nil": return e
     if not any(s["participates"] and s["status"] in OPEN_STATUSES for s in e["sellers"]): return finish_if_done(e)
     r=e["requirements"]; e["round"]+=1; n=e["round"]
     prior={s["id"]:s.get("currentPrice") for s in e["sellers"] if s["participates"] and s.get("currentPrice") is not None and s["status"] not in ("declined","excluded")}
@@ -77,10 +188,12 @@ def step(engine):
         limit=min(r["maxRounds"],s.get("maxRounds",r["maxRounds"]))
         if n>limit: s.update(status="declined",reason="Maximum rounds exhausted"); continue
         floor=cents(s["minimumPrice"],True); maximum=cents(r["maximumPrice"])
+        s_mode = s.get("sellerMode", "semi_automated")
         # Public context for the language model only; private price limits are never included.
         ctx={"product":s.get("productName") or e["productName"],"round":n,"max_rounds":limit}
         history=s["history"]
-        def message(agent,action,price,text): history.append({"round":n,"agent":agent,"action":action,"price":price/100,"explanation":text,"timestamp":now()})
+        def message(agent,action,price,text,comp=False):
+            history.append({"round":n,"agent":agent,"action":action,"price":price/100,"explanation":text,"explanation_ar":ar_fallback(action,agent,price/100,n,comp),"timestamp":now()})
         # The buyer opens at the target price and concedes towards the maximum by the last round.
         buyer_agent = BuyerAgent(BuyerContext(
             opening_price=Decimal(str(r["targetPrice"])),
@@ -101,6 +214,10 @@ def step(engine):
         offer=cents(buyer.price)
         fallback="Opening target offer." if n==1 else "I can improve my offer within the authorized purchase limits."
         message("Buyer Agent","offer",offer,buyer_agent.respond(buyer,fallback,ctx))
+        if s_mode == "nil":
+            history.append({"round":n,"agent":"System","action":"seller_review","price":offer/100,"explanation":"Manual seller mode (Nil): waiting for the Seller to send a counteroffer or accept.","explanation_ar":ar_fallback("seller_review","System",offer/100,n),"timestamp":now()})
+            s.update(status="awaiting_seller",pendingOffer=offer/100,reason="Waiting for manual response from Seller")
+            continue
         starting=cents(s["startingPrice"]); concession=max(1,cents(s.get("concession",max(0.01,s["startingPrice"]*.04))))
         competitor=min((cents(p) for key,p in prior.items() if key!=s["id"]),default=None)
         seller_agent=SellerAgent(SellerContext(
@@ -119,17 +236,18 @@ def step(engine):
         explanation="Counteroffer for the requested quantity and delivery."
         if competitor is not None and seller.price < Decimal(starting-concession*(n-1))/100:
             explanation="I improved my counteroffer after receiving an anonymous competing quote."
-            history.append({"round":n,"agent":"Market update","action":"announcement","price":competitor/100,"explanation":"Anonymous eligible competing quote; no competitor identity or private limits are shared.","timestamp":now()})
+            history.append({"round":n,"agent":"Market update","action":"announcement","price":competitor/100,"explanation":"Anonymous eligible competing quote; no competitor identity or private limits are shared.","explanation_ar":ar_fallback("announcement","Market update",competitor/100,n,True),"timestamp":now()})
         if seller.action=="accept":
             if not floor<=offer<=maximum: raise ValueError("Agreement boundaries violated")
             fallback="I accept the Buyer Agent offer and the requested quantity and delivery."
             message("Seller Agent","accept",offer,seller_agent.respond(seller,fallback,ctx))
             s.update(currentPrice=offer/100,agreedPrice=offer/100,status="agreed",reason="Both Agents accepted the same price")
         else:
-            message("Seller Agent","counteroffer",counter,seller_agent.respond(seller,explanation,{**ctx,"competing_quote":explanation.startswith("I improved")}));s.update(currentPrice=counter/100,status="negotiating",reason="Negotiating")
-            if r.get("mode","semi_automated")=="semi_automated" and offer>=maximum and counter>maximum:
+            comp_flag = explanation.startswith("I improved")
+            message("Seller Agent","counteroffer",counter,seller_agent.respond(seller,explanation,{**ctx,"competing_quote":comp_flag}),comp_flag);s.update(currentPrice=counter/100,status="negotiating",reason="Negotiating")
+            if (r.get("mode","semi_automated")=="semi_automated" or s_mode=="semi_automated") and r.get("mode")!="automated" and offer>=maximum and counter>maximum:
                 # The buyer reached its last point: hand the decision to the human seller.
-                history.append({"round":n,"agent":"System","action":"seller_review","price":offer/100,"explanation":"The buyer reached their final offer. The seller was notified to accept or reject it.","timestamp":now()})
+                history.append({"round":n,"agent":"System","action":"seller_review","price":offer/100,"explanation":"The buyer reached their final offer. The seller was notified to accept or reject it.","explanation_ar":ar_fallback("seller_review","System",offer/100,n),"timestamp":now()})
                 s.update(status="awaiting_seller",pendingOffer=offer/100,reason="Waiting for the seller to accept or reject the buyer's final offer")
             elif n==limit:
                 if counter<=maximum:
@@ -143,7 +261,7 @@ def step(engine):
 
 def buyer_view(engine):
     e=deepcopy(engine)
-    allowed={"id","catalogId","name","startingPrice","stock","deliveryDays","participates","status","reason","currentPrice","agreedPrice","pendingOffer","history","productId","productName","description","matchKey","exactProduct"}
+    allowed={"id","catalogId","name","startingPrice","stock","deliveryDays","participates","status","reason","currentPrice","agreedPrice","pendingOffer","history","productId","productName","description","matchKey","exactProduct","sellerMode"}
     e["sellers"]=[{**{k:v for k,v in s.items() if k in allowed},"exactProduct":s.get("exactProduct",True)} for s in e["sellers"]]
     e["completedRounds"]=e["round"]
     return e

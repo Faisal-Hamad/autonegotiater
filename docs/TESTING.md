@@ -60,6 +60,7 @@ The buyer requirements used in the tests are: target 3,080 SAR, maximum 3,657.50
 | TC-NEG-10 | Session ownership | Another buyer advances the session | 403 |
 | TC-NEG-12 | The buyer picks 2 to 5 listings | Start with 1 listing, 6 listings, or a list without the main product | 400 or 404 |
 | TC-NEG-13 | Negotiate with chosen listings of different models | Pick the iPhone of Seller A and the Samsung; run all rounds; approve the Samsung | Only the 2 chosen listings negotiate (not Seller B); the agreement is for the Samsung |
+| TC-NEG-14 | One-to-One (`single-listing`) and Nil (Manual) buyer/seller modes | Start 1-to-1 negotiation with `mode="nil"`, submit manual buyer offer | 200, only 1 seller participates, round advances with Arabic (`explanation_ar`) and English messages |
 | TC-NEG-11 | Privacy between roles | Buyer and seller read their workspaces | Buyer never sees seller minimums; seller never sees the buyer maximum or other sellers' sessions |
 
 ### 2.3 Direct purchase without negotiation (API, `test_buy_now_api.py`)

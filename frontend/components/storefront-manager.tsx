@@ -2,14 +2,14 @@
 import Link from "next/link";
 import { realMode } from "@/lib/real-api";
 import { ProductIllustration, DesignIcon } from "./approved-visuals";
-import { catalogIdentity } from "@/lib/competitive";
+import { catalogIdentity, type Inventory, type NegotiationMode } from "@/lib/competitive";
 import { money } from "@/lib/demo-model";
 import { useState, type FormEvent } from "react";
 import { useDemo } from "./demo-provider";
 import { useCompetitiveWorkspace } from "./competitive-provider";
 import { validateListing } from "@/lib/demo-integration";
 import { Heading, Empty, Badge, Stats } from "./ui";
-import type { Inventory } from "@/lib/competitive";
+import { useLanguage } from "@/lib/i18n";
 
 function ListingImage({ product, image }: { product: import("@/lib/api").Product; image?: string }) {
     const [failed, setFailed] = useState(false);
@@ -22,6 +22,7 @@ function ListingImage({ product, image }: { product: import("@/lib/api").Product
 
 export function SellerProductsManager() {
     const { user, state, setState, notify } = useDemo(), c = useCompetitiveWorkspace();
+    const { lang } = useLanguage();
     const [query, setQuery] = useState(""), [key, setKey] = useState(""), [mode, setMode] = useState<"product" | "agent" | "new" | null>(null), [catalog, setCatalog] = useState(state.products[0]?.id ?? 0), [error, setError] = useState("");
     const item = c.settings.find(x => `${x.product.id}:${x.listing.id}` === key);
     const product = mode === "new" ? state.products.find(p => p.id === catalog) : item?.product, listing = item?.listing;
@@ -32,6 +33,8 @@ export function SellerProductsManager() {
         e.preventDefault();
         if (!product) return;
         const data = new FormData(e.currentTarget), start = Number(data.get("opening")), discount = Number(data.get("discount")), minimum = Number(data.get("minimum"));
+        const rawSellerMode = String(data.get("sellerMode") ?? "semi_automated");
+        const sellerMode: NegotiationMode = rawSellerMode === "nil" || rawSellerMode === "automated" ? rawSellerMode : "semi_automated";
         const next: Inventory = {
             ...(mode !== "new" && listing ? listing : { id: "new", storefrontKey: "new", name: user.name, ownerSellerId: user.id, productKey: product.catalog_id ?? catalogIdentity(product.id) }),
             startingPrice: start,
@@ -42,8 +45,9 @@ export function SellerProductsManager() {
             deliveryDays: Number(data.get("delivery")),
             concession: Number(data.get("concession")),
             maxRounds: Number(data.get("rounds")),
-            enabled: data.get("enabled") === "on",
+            enabled: sellerMode !== "nil" && data.get("enabled") === "on",
             strategy: data.get("strategy") === "steady" ? "steady" : "competitive",
+            sellerMode,
             description: String(data.get("description") ?? ""),
             imageUrl: String(data.get("image") ?? "").trim(),
         };
@@ -78,14 +82,26 @@ export function SellerProductsManager() {
     }
 
     const totalStock = c.settings.reduce((sum, x) => sum + x.listing.stock, 0);
-    const activeAgents = c.settings.filter(x => x.listing.enabled !== false).length;
+    const activeAgents = c.settings.filter(x => x.listing.enabled !== false || x.listing.sellerMode === "nil").length;
+
+    const sellerModeLabel = (m?: NegotiationMode) => {
+        const val = m ?? "semi_automated";
+        if (lang === "ar") {
+            return val === "nil" ? "يدوي بالكامل (Nil)" : val === "automated" ? "آلي بالكامل (Auto)" : "شبه آلي (Semi)";
+        }
+        return val === "nil" ? "Nil (Manual)" : val === "automated" ? "Automated (Auto)" : "Semi-automated (Semi)";
+    };
 
     return (
         <div className="space-y-6">
             <Heading
-                eyebrow="Seller Storefront & AI Rules"
-                title="My Products & Agent Settings"
-                description="Each listing belongs directly to you and has independent pricing, availability, and private AI Agent rules."
+                eyebrow={lang === "ar" ? "متجر البائع وقواعد التفاوض" : "Seller Storefront & AI Rules"}
+                title={lang === "ar" ? "منتجاتي وإعدادات الوكيل" : "My Products & Agent Settings"}
+                description={
+                    lang === "ar"
+                        ? "تحكم في أسعار منتجاتك، الكمية المتوفرة، ونمط التفاوض الخاص بك (Nil يدوي / Semi شبه آلي / Auto آلي)."
+                        : "Each listing belongs directly to you and has independent pricing, availability, and Seller Negotiation Mode (Nil, Semi, or Auto)."
+                }
                 action={
                     <button
                         className="btn"
@@ -94,17 +110,17 @@ export function SellerProductsManager() {
                             setError("");
                         }}
                     >
-                        + Add Product Listing
+                        {lang === "ar" ? "+ إضافة عرض منتج" : "+ Add Product Listing"}
                     </button>
                 }
             />
 
             <Stats
                 items={[
-                    { label: "Owned Listings", value: c.settings.length, note: "Active storefront items", icon: "box" },
-                    { label: "Total Available Stock", value: `${totalStock} units`, note: "Ready for immediate deals", icon: "truck" },
-                    { label: "AI Agents Enabled", value: `${activeAgents} / ${c.settings.length}`, note: "Automated bargaining active", icon: "bolt" },
-                    { label: "Floor Price Privacy", value: "100% Protected", note: "Hidden from buyers & reports", icon: "shield" },
+                    { label: lang === "ar" ? "العروض المملوكة" : "Owned Listings", value: c.settings.length, note: lang === "ar" ? "منتجات معروضة في المتجر" : "Active storefront items", icon: "box" },
+                    { label: lang === "ar" ? "إجمالي المخزون" : "Total Available Stock", value: `${totalStock} units`, note: lang === "ar" ? "جاهزة للبيع والتفاوض" : "Ready for immediate deals", icon: "truck" },
+                    { label: lang === "ar" ? "العروض المفعلة للتفاوض" : "Active Listings", value: `${activeAgents} / ${c.settings.length}`, note: "Nil / Semi / Auto active", icon: "bolt" },
+                    { label: lang === "ar" ? "حماية الحد الأدنى" : "Floor Price Privacy", value: "100% Protected", note: lang === "ar" ? "مخفي عن المشترين والتقارير" : "Hidden from buyers & reports", icon: "shield" },
                 ]}
             />
 
@@ -112,8 +128,10 @@ export function SellerProductsManager() {
                 <section className="panel border-indigo-200 bg-gradient-to-b from-indigo-50/30 to-white space-y-5">
                     <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-100">
                         <div>
-                            <span className="eyebrow !mb-1">{mode === "new" ? "New Catalog Listing" : mode === "agent" ? "AI Negotiation Rules" : "Listing Details"}</span>
-                            <h2 className="text-xl font-bold text-slate-900">{mode === "new" ? "Add Product Listing" : mode === "agent" ? "Configure Agent" : "Edit Product Listing"}</h2>
+                            <span className="eyebrow !mb-1">{mode === "new" ? "New Catalog Listing" : mode === "agent" ? "Seller Negotiation Mode & Rules" : "Listing Details"}</span>
+                            <h2 className="text-xl font-bold text-slate-900">
+                                {mode === "new" ? "Add Product Listing" : mode === "agent" ? "Configure Agent & Negotiation Mode" : "Edit Product Listing"}
+                            </h2>
                         </div>
                         <button className="btn-secondary" onClick={() => setMode(null)}>
                             Close editor
@@ -137,6 +155,29 @@ export function SellerProductsManager() {
                     </p>
                     {product && (
                         <form key={`${mode}:${catalog}:${key}`} className="space-y-5" onSubmit={save}>
+                            <div className="p-4 rounded-xl bg-indigo-50/60 border border-indigo-200/80 space-y-2">
+                                <label className="text-sm font-bold text-indigo-950">
+                                    {lang === "ar" ? "نمط التفاوض للبائع (Seller Negotiation Mode: Nil / Semi / Auto)" : "Seller Negotiation Mode (Nil / Semi / Auto)"}
+                                    <select name="sellerMode" defaultValue={mode === "new" ? "semi_automated" : listing?.sellerMode ?? "semi_automated"} className="mt-2 font-semibold">
+                                        <option value="nil">
+                                            {lang === "ar"
+                                                ? "Nil (يدوي بالكامل - بشري ١٠٠٪ بدون تدخل الوكيل الذكي)"
+                                                : "Nil (Manual — 100% human bargaining; you respond manually to every offer)"}
+                                        </option>
+                                        <option value="semi_automated">
+                                            {lang === "ar"
+                                                ? "Semi-automated (شبه آلي - الوكيل يفاوض والقرار النهائي لك)"
+                                                : "Semi-automated (Agent bargains rounds; final decision is yours)"}
+                                        </option>
+                                        <option value="automated">
+                                            {lang === "ar"
+                                                ? "Automated (آلي بالكامل - الوكيل يفاوض ويغلق الصفقة تلقائياً ضمن حدودك)"
+                                                : "Automated (100% autonomous AI agent within your floor price)"}
+                                        </option>
+                                    </select>
+                                </label>
+                            </div>
+
                             <div className="field-grid">
                                 <label>
                                     Product description / specifications
@@ -199,7 +240,7 @@ export function SellerProductsManager() {
                             </div>
                             <label className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-200/70">
                                 <input className="w-auto" name="enabled" type="checkbox" defaultChecked={mode === "new" || listing?.enabled !== false} />
-                                <span>Enable Seller Agent for automated and semi-automated deals</span>
+                                <span>Enable Seller Agent for Semi-automated and Automated modes</span>
                             </label>
                             <p className="text-xs muted">
                                 The effective floor is the greater of your private minimum and the opening price after maximum allowed discount. Changes apply only to future sessions.
@@ -220,7 +261,7 @@ export function SellerProductsManager() {
 
             <div className="panel bg-slate-50/60">
                 <label className="max-w-md text-xs font-semibold uppercase tracking-wider text-slate-500">
-                    Search your products
+                    {lang === "ar" ? "ابحث في منتجاتك" : "Search your products"}
                     <input value={query} onChange={e => setQuery(e.target.value)} placeholder="Product name or listing ID" />
                 </label>
             </div>
@@ -239,7 +280,11 @@ export function SellerProductsManager() {
                                     </div>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex flex-wrap items-center justify-between gap-2">
-                                            <Badge tone={l.enabled === false ? "rose" : "emerald"}>{l.enabled === false ? "Agent Disabled" : "Agent Active"}</Badge>
+                                            <div className="flex flex-wrap items-center gap-1.5">
+                                                <Badge tone={l.sellerMode === "nil" ? "amber" : l.enabled === false ? "rose" : "emerald"}>
+                                                    {sellerModeLabel(l.sellerMode)}
+                                                </Badge>
+                                            </div>
                                             <span className="text-xs font-mono text-slate-400">Listing {l.id}</span>
                                         </div>
                                         <h2 className="text-lg font-bold text-slate-900 mt-2">{p.name}</h2>
@@ -249,26 +294,27 @@ export function SellerProductsManager() {
 
                                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3.5 rounded-xl bg-slate-50/80 border border-slate-100 text-xs">
                                     <div>
-                                        <span className="muted block">Opening price</span>
+                                        <span className="muted block">{lang === "ar" ? "السعر المعلن" : "Opening price"}</span>
                                         <strong className="text-sm text-slate-900 mt-0.5 block">{money(l.startingPrice)}</strong>
                                     </div>
                                     <div>
-                                        <span className="muted block">Private floor</span>
+                                        <span className="muted block">{lang === "ar" ? "الحد الأدنى (سري)" : "Private floor"}</span>
                                         <strong className="text-sm text-indigo-700 mt-0.5 block">{money(l.minimumPrice)}</strong>
                                     </div>
                                     <div>
-                                        <span className="muted block">Available stock</span>
+                                        <span className="muted block">{lang === "ar" ? "المخزون" : "Available stock"}</span>
                                         <strong className="text-sm text-slate-900 mt-0.5 block">{l.stock} units</strong>
                                     </div>
                                     <div>
-                                        <span className="muted block">Delivery</span>
+                                        <span className="muted block">{lang === "ar" ? "التوصيل" : "Delivery"}</span>
                                         <strong className="text-sm text-slate-900 mt-0.5 block">Within {l.deliveryDays} days</strong>
                                     </div>
                                 </div>
 
                                 <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                                     <span className="text-xs text-slate-500">
-                                        Strategy: <strong className="text-slate-700">{l.strategy === "steady" ? "Steady / Firm" : "Competitive / Balanced"}</strong>
+                                        {lang === "ar" ? "الاستراتيجية:" : "Strategy:"}{" "}
+                                        <strong className="text-slate-700">{l.strategy === "steady" ? "Steady / Firm" : "Competitive / Balanced"}</strong>
                                     </span>
                                     <div className="flex flex-wrap gap-2.5">
                                         <button className="btn-secondary text-xs py-2 px-3.5" onClick={() => edit(`${p.id}:${l.id}`, "product")}>
@@ -289,15 +335,20 @@ export function SellerProductsManager() {
 
 export function AdminProductListings() {
     const { state, user } = useDemo(), c = useCompetitiveWorkspace();
+    const { lang } = useLanguage();
     const [query, setQuery] = useState("");
     if (user.role !== "admin" || !user.active) return null;
     const rows = c.reportListings.filter(l => `${l.productName} ${l.storefrontName} ${l.storefrontKey}`.toLowerCase().includes(query.toLowerCase()));
     return (
         <div className="space-y-6">
             <Heading
-                eyebrow="Admin Catalog Governance"
-                title="Product Monitoring"
-                description="Public Seller product listing information only. Private Agent floor prices and concession rules are strictly excluded."
+                eyebrow={lang === "ar" ? "رقابة الكتالوج للأدمن" : "Admin Catalog Governance"}
+                title={lang === "ar" ? "مراقبة المنتجات" : "Product Monitoring"}
+                description={
+                    lang === "ar"
+                        ? "معلومات العروض العامة فقط. الحدود السرية للبائعين مستبعدة تماماً."
+                        : "Public Seller product listing information only. Private Agent floor prices and concession rules are strictly excluded."
+                }
             />
             <div className="panel bg-slate-50/60">
                 <label className="max-w-md text-xs font-semibold uppercase tracking-wider text-slate-500">
