@@ -9,7 +9,7 @@ import { AgreementLinks } from "./agreement-links";
 import { useCompetitiveWorkspace, useCompetitive } from "./competitive-provider";
 import { Empty, BackendPending } from "./ui";
 import { money } from "@/lib/demo-model";
-import { modeLabels, rankedOffers, requirementsFor, validateRequirements, type NegotiationMode, type Requirements, type SellerView } from "@/lib/competitive";
+import { modeLabels, rankedOffers, requirementsFor, sellerStatusLabels, validateRequirements, type NegotiationMode, type Requirements, type SellerView } from "@/lib/competitive";
 import { DesignIcon, ProductIllustration, StoreMark } from "./approved-visuals";
 import { useLanguage } from "@/lib/i18n";
 
