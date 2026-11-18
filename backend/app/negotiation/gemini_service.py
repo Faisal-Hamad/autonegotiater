@@ -356,13 +356,40 @@ def get_gemini_service() -> GeminiService:
 
 
 _ARABIC_CHAR = re.compile(r"[\u0600-\u06FF]")
+_TRANSLATION_CACHE: dict[str, tuple[str, str]] = {}
+_TRANSLATION_CACHE_LOCK = threading.Lock()
+
+
+def _google_translate_fallback(text: str, target_lang: str) -> str | None:
+    """Secondary lightweight translation fallback if Gemini keys hit rate-limit/cooldown."""
+    try:
+        endpoint = (
+            "https://translate.googleapis.com/translate_a/single"
+            f"?client=gtx&sl=auto&tl={quote(target_lang)}&dt=t&q={quote(text)}"
+        )
+        req = Request(endpoint, headers={"User-Agent": "Mozilla/5.0"}, method="GET")
+        with urlopen(req, timeout=4.0) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        if isinstance(data, list) and data and isinstance(data[0], list):
+            parts = [seg[0] for seg in data[0] if isinstance(seg, list) and seg and isinstance(seg[0], str)]
+            joined = "".join(parts).strip()
+            if joined:
+                return joined
+    except Exception:
+        pass
+    return None
 
 
 def translate_bilingual_note(note: str) -> tuple[str, str]:
-    """Translate a manual negotiation note into both (english_text, arabic_text) using Gemini."""
+    """Translate a manual negotiation note into both (english_text, arabic_text) with caching."""
     clean = (note or "").strip()
     if not clean:
         return "", ""
+
+    with _TRANSLATION_CACHE_LOCK:
+        cached = _TRANSLATION_CACHE.get(clean)
+    if cached is not None:
+        return cached
 
     has_arabic = bool(_ARABIC_CHAR.search(clean))
     service = get_gemini_service()
@@ -391,7 +418,11 @@ def translate_bilingual_note(note: str) -> tuple[str, str]:
             return False
         en_v = parsed.get("en")
         ar_v = parsed.get("ar")
-        return isinstance(en_v, str) and bool(en_v.strip()) and isinstance(ar_v, str) and bool(ar_v.strip())
+        if not (isinstance(en_v, str) and bool(en_v.strip()) and isinstance(ar_v, str) and bool(ar_v.strip())):
+            return False
+        if not has_arabic and not _ARABIC_CHAR.search(ar_v):
+            return False
+        return True
 
     raw_resp = service._generate(
         prompt,
@@ -402,13 +433,29 @@ def translate_bilingual_note(note: str) -> tuple[str, str]:
     if raw_resp:
         try:
             parsed = json.loads(raw_resp)
-            en_text = parsed["en"].strip()
+            en_text = clean if not has_arabic else parsed["en"].strip()
             ar_text = clean if has_arabic else parsed["ar"].strip()
-            if en_text and ar_text:
-                return en_text, ar_text
+            if en_text and ar_text and (has_arabic or _ARABIC_CHAR.search(ar_text)):
+                result = (en_text, ar_text)
+                with _TRANSLATION_CACHE_LOCK:
+                    _TRANSLATION_CACHE[clean] = result
+                return result
         except Exception:
             pass
 
     if has_arabic:
+        gt_en = _google_translate_fallback(clean, "en")
+        if gt_en and not _ARABIC_CHAR.search(gt_en):
+            result = (gt_en, clean)
+            with _TRANSLATION_CACHE_LOCK:
+                _TRANSLATION_CACHE[clean] = result
+            return result
         return f"Buyer/Seller Note (Arabic): {clean}", clean
+
+    gt_ar = _google_translate_fallback(clean, "ar")
+    if gt_ar and _ARABIC_CHAR.search(gt_ar):
+        result = (clean, gt_ar)
+        with _TRANSLATION_CACHE_LOCK:
+            _TRANSLATION_CACHE[clean] = result
+        return result
     return clean, f"ملاحظة الطرف الآخر: {clean}"

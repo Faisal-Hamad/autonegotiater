@@ -36,20 +36,32 @@ async def catalog(db,private_owner=None):
 async def public_catalog(db=Depends(get_session)):return await catalog(db)
 _AR_RE = re.compile(r"[\u0600-\u06FF]")
 def _normalize_bilingual_history(e):
+    changed = False
     for s in e.get("sellers", []):
         for m in s.get("history", []):
             exp = str(m.get("explanation") or "")
+            exp_ar = str(m.get("explanation_ar") or "")
             if exp and _AR_RE.search(exp):
                 en_t, ar_t = translate_bilingual_note(exp)
-                m["explanation"] = en_t
-                m["explanation_ar"] = ar_t
-            elif not m.get("explanation_ar"):
-                m["explanation_ar"] = exp
-    return e
+                if m.get("explanation") != en_t or m.get("explanation_ar") != ar_t:
+                    m["explanation"] = en_t
+                    m["explanation_ar"] = ar_t
+                    changed = True
+            elif exp and (not exp_ar or not _AR_RE.search(exp_ar) or exp_ar.startswith("ملاحظة الطرف الآخر:")):
+                en_t, ar_t = translate_bilingual_note(exp)
+                if m.get("explanation") != en_t or m.get("explanation_ar") != ar_t:
+                    m["explanation"] = en_t
+                    m["explanation_ar"] = ar_t
+                    changed = True
+    return e, changed
 async def payload(db,user):
     uid=user["id"];role=user["role"];base=await build_workspace_state(db,viewer_id=uid);items=await catalog(db,uid if role=="seller" else None);attempts=sorted(await load(db,"attempt"),key=lambda row:row["data"]["createdAt"]);views=[];seller_views=[];ops=[];agreements=[];hidden_sessions=set();seller_notices=[]
     for rec in attempts:
-        e=_normalize_bilingual_history(deepcopy(rec["data"]));owned=uid==e["buyerId"] if role=="buyer" else any(s["sellerId"]==uid for s in e["sellers"]) if role=="seller" else role=="admin"
+        e, norm_changed = _normalize_bilingual_history(deepcopy(rec["data"]))
+        if norm_changed:
+            await db.execute(update(records).where(records.c.id==rec["id"]).values(data=e))
+            await db.commit()
+        owned=uid==e["buyerId"] if role=="buyer" else any(s["sellerId"]==uid for s in e["sellers"]) if role=="seller" else role=="admin"
         if not owned:continue
         product=e["product"];rid=rec["id"];status="completed" if e["phase"]=="approved" else "awaiting_approval" if e["phase"]=="review" and any(s["status"]=="agreed" for s in e["sellers"]) else "failed" if e["phase"]=="review" else e["phase"] if e["phase"] in ("cancelled","rejected") else "paused" if e.get("paused") else "active"
         if role=="buyer":views.append({**buyer_view(e),"attemptId":rid})
