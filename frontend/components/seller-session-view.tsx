@@ -336,25 +336,41 @@ export function SellerSessionView({ session: s, buyerName, product }: { session:
                             </span>
                             {lang === "ar" ? "محادثة التفاوض" : "Negotiation Conversation"}
                         </h2>
-                        <span>Buyer Agent ↔ Seller Agent</span>
+                        <span>{lang === "ar" ? "وكيل المشتري ↔ وكيل البائع" : "Buyer Agent ↔ Seller Agent"}</span>
                     </div>
                     <div ref={log} className="an-messages" role="log" aria-label="Seller negotiation messages" aria-live="polite" aria-relevant="additions" tabIndex={0}>
                         {s.history.length ? (
                             s.history.map((m, i) => {
                                 const text = lang === "ar" && m.explanation_ar ? m.explanation_ar : m.explanation;
+                                const senderTitle =
+                                    lang === "ar"
+                                        ? m.agent === "Buyer Agent"
+                                            ? "وكيل المشتري (أو عرض المشتري)"
+                                            : m.agent === "Seller Agent"
+                                              ? `وكيل البائع (${s.storefrontName})`
+                                              : m.agent === "Seller"
+                                                ? "قرارك اليدوي"
+                                                : m.agent === "System"
+                                                  ? "النظام"
+                                                  : "تحديث السوق"
+                                        : m.agent === "Seller Agent"
+                                          ? `Seller Agent (${s.storefrontName})`
+                                          : m.agent === "Seller"
+                                            ? "Your decision"
+                                            : m.agent;
                                 return (
                                     <div key={`${s.id}-${i}`} className={`an-message ${m.agent === "Buyer Agent" ? "an-buyer" : m.agent === "Seller Agent" || m.agent === "Seller" ? "an-seller" : "an-market"}`}>
                                         <span className="an-agent-avatar">{m.agent === "Buyer Agent" ? "B" : m.agent === "Seller Agent" || m.agent === "Seller" ? "S" : m.agent === "System" ? "!" : "↗"}</span>
                                         <div className="an-bubble">
-                                            <strong>{m.agent === "Seller Agent" ? `Seller Agent (${s.storefrontName})` : m.agent === "Seller" ? "Your decision" : m.agent}</strong>
+                                            <strong>{senderTitle}</strong>
                                             <p>
-                                                {m.price !== undefined && <b>{money(m.price)} / unit · </b>}
+                                                {m.price !== undefined && <b>{money(m.price)} / {lang === "ar" ? "وحدة" : "unit"} · </b>}
                                                 {text}
                                             </p>
                                         </div>
                                         <div className="an-message-meta">
                                             #{String(i + 1).padStart(2, "0")}
-                                            <span>Round {m.round}</span>
+                                            <span>{lang === "ar" ? `الجولة ${m.round}` : `Round ${m.round}`}</span>
                                         </div>
                                     </div>
                                 );
@@ -386,7 +402,7 @@ export function SellerSessionView({ session: s, buyerName, product }: { session:
                     <div className="sn-round-track" aria-label="Round timeline">
                         {Array.from({ length: s.maxRounds }, (_, i) => i + 1).map(n => (
                             <span key={n} className={n === s.round ? "active" : n < s.round ? "complete" : ""}>
-                                Round {n}
+                                {lang === "ar" ? `الجولة ${n}` : `Round ${n}`}
                             </span>
                         ))}
                     </div>

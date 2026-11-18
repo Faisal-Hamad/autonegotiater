@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from app.negotiation.buyer_agent import BuyerAgent, BuyerContext
 from app.negotiation.seller_agent import SellerAgent, SellerContext
 from app.negotiation.schemas import Decision
+from app.negotiation.gemini_service import translate_bilingual_note
 
 def cents(value, upward=False):
     d=Decimal(str(value))*100
@@ -15,6 +16,12 @@ def now(): return datetime.now(timezone.utc).isoformat()
 
 MODES=("nil","semi_automated","automated")
 OPEN_STATUSES=("ready","negotiating")
+
+def _bilingual_manual_note(note, default_en, default_ar):
+    clean = (note or "").strip()
+    if clean:
+        return translate_bilingual_note(clean)
+    return default_en, default_ar
 
 def ar_fallback(action, agent, price=None, round_num=1, competing=False):
     p_str = f"{price:,.2f} ر.س" if price is not None else ""
@@ -81,13 +88,15 @@ def seller_decide(engine,listing_id,seller_id,decision,counter_price=None,note=N
         raise LookupError("No decision is pending for this listing.")
     price=s.get("pendingOffer") or (s["history"][-1].get("price") if s["history"] else s["startingPrice"])
     if decision=="accept":
-        text = note.strip() if note and note.strip() else "The seller accepted the buyer's offer."
-        s["history"].append({"round":max(1,e["round"]),"agent":"Seller","action":"accept","price":price,"explanation":text,"explanation_ar":ar_fallback("accept","Seller",price,max(1,e["round"])),"timestamp":now()})
+        r_num = max(1, e["round"])
+        text_en, text_ar = _bilingual_manual_note(note, "The seller accepted the buyer's offer.", ar_fallback("accept","Seller",price,r_num))
+        s["history"].append({"round":r_num,"agent":"Seller","action":"accept","price":price,"explanation":text_en,"explanation_ar":text_ar,"timestamp":now()})
         s.update(status="agreed",currentPrice=price,agreedPrice=price,sellerDecision="accept",reason="The seller accepted the buyer's final offer")
         s.pop("pendingOffer",None)
     elif decision=="reject":
-        text = note.strip() if note and note.strip() else "The seller rejected the buyer's final offer."
-        s["history"].append({"round":max(1,e["round"]),"agent":"Seller","action":"reject","price":price,"explanation":text,"explanation_ar":ar_fallback("reject","Seller",price,max(1,e["round"])),"timestamp":now()})
+        r_num = max(1, e["round"])
+        text_en, text_ar = _bilingual_manual_note(note, "The seller rejected the buyer's final offer.", ar_fallback("reject","Seller",price,r_num))
+        s["history"].append({"round":r_num,"agent":"Seller","action":"reject","price":price,"explanation":text_en,"explanation_ar":text_ar,"timestamp":now()})
         s.update(status="declined",sellerDecision="reject",reason="The seller rejected the buyer's final offer")
         s.pop("pendingOffer",None)
     elif decision=="counter" and counter_price is not None:
@@ -95,9 +104,9 @@ def seller_decide(engine,listing_id,seller_id,decision,counter_price=None,note=N
         floor = cents(s["minimumPrice"],True)/100
         if c_val < floor:
             raise ValueError("Counteroffer cannot be below your minimum acceptable price.")
-        text = note.strip() if note and note.strip() else f"Manual seller counteroffer at {c_val:,.2f} SAR."
         r_num = max(1, e["round"])
-        s["history"].append({"round":r_num,"agent":"Seller","action":"counteroffer","price":c_val,"explanation":text,"explanation_ar":ar_fallback("counteroffer","Seller",c_val,r_num),"timestamp":now()})
+        text_en, text_ar = _bilingual_manual_note(note, f"Manual seller counteroffer at {c_val:,.2f} SAR.", ar_fallback("counteroffer","Seller",c_val,r_num))
+        s["history"].append({"round":r_num,"agent":"Seller","action":"counteroffer","price":c_val,"explanation":text_en,"explanation_ar":text_ar,"timestamp":now()})
         s.update(status="negotiating",currentPrice=c_val,reason="Manual counteroffer sent by Seller")
         s.pop("pendingOffer",None)
         if c_val <= e["requirements"]["maximumPrice"] and e["requirements"].get("mode") != "nil":
@@ -131,12 +140,12 @@ def buyer_manual_offer(engine, offer_price, note=None, listing_id=None, action="
         floor = cents(s["minimumPrice"], True) / 100
         if action == "accept" and s.get("currentPrice") is not None and s["currentPrice"] <= r["maximumPrice"]:
             agreed_p = s["currentPrice"]
-            text = note.strip() if note and note.strip() else "I accept your current offer."
-            s["history"].append({"round": n, "agent": "Buyer Agent", "action": "accept", "price": agreed_p, "explanation": text, "explanation_ar": ar_fallback("accept", "Buyer", agreed_p, n), "timestamp": now()})
+            text_en, text_ar = _bilingual_manual_note(note, "I accept your current offer.", ar_fallback("accept", "Buyer", agreed_p, n))
+            s["history"].append({"round": n, "agent": "Buyer Agent", "action": "accept", "price": agreed_p, "explanation": text_en, "explanation_ar": text_ar, "timestamp": now()})
             s.update(status="agreed", agreedPrice=agreed_p, reason="Buyer manually accepted the seller's offer")
             continue
-        text = note.strip() if note and note.strip() else f"Manual buyer offer of {p_val:,.2f} SAR."
-        s["history"].append({"round": n, "agent": "Buyer Agent", "action": "offer", "price": p_val, "explanation": text, "explanation_ar": ar_fallback("offer", "Buyer", p_val, n), "timestamp": now()})
+        text_en, text_ar = _bilingual_manual_note(note, f"Manual buyer offer of {p_val:,.2f} SAR.", ar_fallback("offer", "Buyer", p_val, n))
+        s["history"].append({"round": n, "agent": "Buyer Agent", "action": "offer", "price": p_val, "explanation": text_en, "explanation_ar": text_ar, "timestamp": now()})
         s_mode = s.get("sellerMode", "semi_automated")
         if s_mode == "nil":
             s.update(status="awaiting_seller", pendingOffer=p_val, reason="Waiting for manual response from Seller")

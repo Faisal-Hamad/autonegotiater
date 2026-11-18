@@ -353,3 +353,62 @@ def get_gemini_service() -> GeminiService:
         if _default_service is None:
             _default_service = GeminiService()
         return _default_service
+
+
+_ARABIC_CHAR = re.compile(r"[\u0600-\u06FF]")
+
+
+def translate_bilingual_note(note: str) -> tuple[str, str]:
+    """Translate a manual negotiation note into both (english_text, arabic_text) using Gemini."""
+    clean = (note or "").strip()
+    if not clean:
+        return "", ""
+
+    has_arabic = bool(_ARABIC_CHAR.search(clean))
+    service = get_gemini_service()
+    prompt = (
+        "You are a professional bilingual e-commerce negotiation translator.\n"
+        "Translate the following negotiation message accurately into both English and Arabic, "
+        "preserving the exact meaning, price intent, and polite commercial tone.\n"
+        "Return ONLY valid JSON matching the schema.\n\n"
+        f"Message: {clean}"
+    )
+    schema: dict[str, Any] = {
+        "type": "OBJECT",
+        "properties": {
+            "en": {"type": "STRING"},
+            "ar": {"type": "STRING"},
+        },
+        "required": ["en", "ar"],
+    }
+
+    def _validate(raw: str) -> bool:
+        try:
+            parsed = json.loads(raw)
+        except (ValueError, TypeError):
+            return False
+        if not isinstance(parsed, dict):
+            return False
+        en_v = parsed.get("en")
+        ar_v = parsed.get("ar")
+        return isinstance(en_v, str) and bool(en_v.strip()) and isinstance(ar_v, str) and bool(ar_v.strip())
+
+    raw_resp = service._generate(
+        prompt,
+        schema,
+        validator=_validate,
+        validation_reason=lambda _: "invalid_bilingual_translation",
+    )
+    if raw_resp:
+        try:
+            parsed = json.loads(raw_resp)
+            en_text = parsed["en"].strip()
+            ar_text = clean if has_arabic else parsed["ar"].strip()
+            if en_text and ar_text:
+                return en_text, ar_text
+        except Exception:
+            pass
+
+    if has_arabic:
+        return f"Buyer/Seller Note (Arabic): {clean}", clean
+    return clean, f"ملاحظة الطرف الآخر: {clean}"

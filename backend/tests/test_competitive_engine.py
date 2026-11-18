@@ -93,4 +93,10 @@ class NilAndCrossModeTests(unittest.TestCase):
   s=engine.buyer_manual_offer(s,3550,"Accepted","s2","accept")
   self.assertEqual(s["sellers"][1]["status"],"agreed")
   self.assertEqual(s["sellers"][1]["agreedPrice"],3550)
+ def test_manual_arabic_note_generates_bilingual_explanations(self):
+  s=engine.create({"id":1,"name":"Phone"},9,self.r,self.listings)
+  s=engine.buyer_manual_offer(s,3400,"المعذره سعرك غالي بس انا ابيه بالسعر اللي محدده لك")
+  msg=s["sellers"][0]["history"][0]
+  self.assertEqual(msg["explanation_ar"],"المعذره سعرك غالي بس انا ابيه بالسعر اللي محدده لك")
+  self.assertTrue(msg["explanation"].startswith("Buyer/Seller Note (Arabic):"))
 if __name__=="__main__":unittest.main()

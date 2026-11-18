@@ -1,4 +1,5 @@
 """Authenticated persistence adapter for the approved multi-seller and one-to-one interfaces."""
+import re
 import uuid
 from typing import Literal
 from copy import deepcopy
@@ -11,6 +12,7 @@ from app.db import Base,get_session
 from app.models import User,Product,SellerRule,NegotiationSession,Offer,Deal,AuditLog
 from app.integration_auth import current_user,public_user
 from app.competitive_engine import create,step,buyer_view,cents,now,seller_decide,buyer_manual_offer
+from app.negotiation.gemini_service import translate_bilingual_note
 from app.product_identity import catalog_match_key
 from app.routers.workspace import build_workspace_state
 router=APIRouter(prefix="/integration",tags=["authenticated integration"])
@@ -32,10 +34,22 @@ async def catalog(db,private_owner=None):
     return out
 @router.get("/catalog")
 async def public_catalog(db=Depends(get_session)):return await catalog(db)
+_AR_RE = re.compile(r"[\u0600-\u06FF]")
+def _normalize_bilingual_history(e):
+    for s in e.get("sellers", []):
+        for m in s.get("history", []):
+            exp = str(m.get("explanation") or "")
+            if exp and _AR_RE.search(exp):
+                en_t, ar_t = translate_bilingual_note(exp)
+                m["explanation"] = en_t
+                m["explanation_ar"] = ar_t
+            elif not m.get("explanation_ar"):
+                m["explanation_ar"] = exp
+    return e
 async def payload(db,user):
     uid=user["id"];role=user["role"];base=await build_workspace_state(db,viewer_id=uid);items=await catalog(db,uid if role=="seller" else None);attempts=sorted(await load(db,"attempt"),key=lambda row:row["data"]["createdAt"]);views=[];seller_views=[];ops=[];agreements=[];hidden_sessions=set();seller_notices=[]
     for rec in attempts:
-        e=rec["data"];owned=uid==e["buyerId"] if role=="buyer" else any(s["sellerId"]==uid for s in e["sellers"]) if role=="seller" else role=="admin"
+        e=_normalize_bilingual_history(deepcopy(rec["data"]));owned=uid==e["buyerId"] if role=="buyer" else any(s["sellerId"]==uid for s in e["sellers"]) if role=="seller" else role=="admin"
         if not owned:continue
         product=e["product"];rid=rec["id"];status="completed" if e["phase"]=="approved" else "awaiting_approval" if e["phase"]=="review" and any(s["status"]=="agreed" for s in e["sellers"]) else "failed" if e["phase"]=="review" else e["phase"] if e["phase"] in ("cancelled","rejected") else "paused" if e.get("paused") else "active"
         if role=="buyer":views.append({**buyer_view(e),"attemptId":rid})

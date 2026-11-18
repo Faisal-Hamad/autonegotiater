@@ -206,6 +206,16 @@ export function advanceCompetitiveStep(input: CompetitiveSession): CompetitiveSe
     return pending.index === pending.events.length ? pending.target : next;
 }
 
+function bilingualNote(note: string | undefined, defaultEn: string, defaultAr: string): { explanation: string; explanation_ar: string } {
+    const clean = (note || "").trim();
+    if (!clean) return { explanation: defaultEn, explanation_ar: defaultAr };
+    const hasAr = /[\u0600-\u06FF]/.test(clean);
+    if (hasAr) {
+        return { explanation: `Party Note (Arabic): ${clean}`, explanation_ar: clean };
+    }
+    return { explanation: clean, explanation_ar: `ملاحظة الطرف الآخر: ${clean}` };
+}
+
 export function manualBuyerOfferLocal(input: CompetitiveSession, price: number, note?: string, listingId?: string, action: "offer" | "accept" = "offer"): CompetitiveSession {
     if (input.phase !== "running") return input;
     const s = structuredClone(input), r = s.requirements;
@@ -219,12 +229,14 @@ export function manualBuyerOfferLocal(input: CompetitiveSession, price: number, 
         const own = seller.inventory;
         if (action === "accept" && seller.currentPrice !== undefined && seller.currentPrice <= r.maximumPrice) {
             const agreed = seller.currentPrice;
-            seller.history.push({ round: n, agent: "Buyer Agent", action: "accept", price: agreed, explanation: note?.trim() || "I accept your current counteroffer." }, { round: n, agent: "Seller Agent", action: "accept", price: agreed, explanation: "Confirmed agreement at the accepted price." });
+            const bNote = bilingualNote(note, "I accept your current counteroffer.", "أوافق على العرض المقابل الحالي.");
+            seller.history.push({ round: n, agent: "Buyer Agent", action: "accept", price: agreed, ...bNote }, { round: n, agent: "Seller Agent", action: "accept", price: agreed, explanation: "Confirmed agreement at the accepted price.", explanation_ar: "تم تأكيد الاتفاقية بالسعر المقبول." });
             seller.agreedPrice = agreed; seller.status = "agreed";
             seller.reason = "Buyer manually accepted the seller's offer.";
             continue;
         }
-        seller.history.push({ round: n, agent: "Buyer Agent", action: "offer", price: pVal, explanation: note?.trim() || `Manual buyer offer of ${currency(pVal)}.` });
+        const bOffNote = bilingualNote(note, `Manual buyer offer of ${currency(pVal)}.`, `عرض يدوي من المشتري بقيمة ${currency(pVal)}.`);
+        seller.history.push({ round: n, agent: "Buyer Agent", action: "offer", price: pVal, ...bOffNote });
         if (own.sellerMode === "nil") {
             seller.status = "awaiting_seller";
             seller.pendingOffer = pVal;
@@ -255,16 +267,16 @@ export function sellerDecideLocal(input: CompetitiveSession, listingId: string, 
     const n = Math.max(1, s.round);
     const pending = seller.pendingOffer ?? seller.currentPrice ?? seller.inventory.startingPrice;
     if (decision === "accept") {
-        seller.history.push({ round: n, agent: "Seller", action: "accept", price: pending, explanation: note?.trim() || "The seller accepted the buyer's offer." });
+        seller.history.push({ round: n, agent: "Seller", action: "accept", price: pending, ...bilingualNote(note, "The seller accepted the buyer's offer.", "وافق البائع على عرض المشتري.") });
         seller.currentPrice = pending; seller.agreedPrice = pending; seller.status = "agreed"; seller.pendingOffer = undefined;
         seller.reason = "The seller accepted the buyer's offer.";
     } else if (decision === "reject") {
-        seller.history.push({ round: n, agent: "Seller", action: "reject", price: pending, explanation: note?.trim() || "The seller rejected the buyer's offer." });
+        seller.history.push({ round: n, agent: "Seller", action: "reject", price: pending, ...bilingualNote(note, "The seller rejected the buyer's offer.", "رفض البائع عرض المشتري.") });
         seller.status = "declined"; seller.pendingOffer = undefined;
         seller.reason = "The seller rejected the buyer's offer.";
     } else if (decision === "counter" && counterPrice !== undefined) {
         const cVal = Math.max(seller.inventory.minimumPrice, Math.round(counterPrice * 100) / 100);
-        seller.history.push({ round: n, agent: "Seller", action: "counteroffer", price: cVal, explanation: note?.trim() || `Manual seller counteroffer at ${currency(cVal)}.` });
+        seller.history.push({ round: n, agent: "Seller", action: "counteroffer", price: cVal, ...bilingualNote(note, `Manual seller counteroffer at ${currency(cVal)}.`, `عرض مقابل يدوي من البائع بقيمة ${currency(cVal)}.`) });
         seller.currentPrice = cVal; seller.status = "negotiating"; seller.pendingOffer = undefined;
         if (cVal <= s.requirements.maximumPrice && s.requirements.mode !== "nil") {
             seller.history.push({ round: n, agent: "Buyer Agent", action: "accept", price: cVal, explanation: "I accept your counteroffer within the authorized limits." });
